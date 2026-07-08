@@ -1,16 +1,13 @@
-# Pickleball Signup v2.2.1
+# Pickleball Signup v2.2.2
 
-Firebase-connected version with polished Notification Center.
+Firebase-connected version.
 
-## Added
-- Notification bell with unread badge
-- Collapsible notification dropdown
-- Mark all as read
-- Notification color accents by type
-- Manual coordinator notification publisher
-- Auto-notifications for new events and major status changes
-
-## Preserved
-- Existing Firebase project
-- Existing Firestore collections: users, events, locations, notifications
-- Existing GitHub Pages setup
+Updates:
+- Notification Center
+- Player booking/details display
+- Status options now support multiple selections:
+  - Court Booked
+  - Closed for Renovation
+  - Closed for Event
+  - Cancelled
+  - Fully Booked
