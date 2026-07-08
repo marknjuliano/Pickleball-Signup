@@ -1,3 +1,3 @@
-# Pickleball Signup v2.1 Firebase
+# Pickleball Signup v2.1.2
 
-Firebase-connected GitHub Pages app. v2.1 adds user-friendly Firebase Authentication error messages.
+Firebase-connected version. Updated label: Closed for Renovation.
