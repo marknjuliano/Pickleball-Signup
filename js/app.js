@@ -14,6 +14,24 @@ const DEFAULT_LOCATIONS = ['DinkHouse','Liberty Park','Cerritos Courts'];
 let state = { user:null, profile:null, events:[], locations:[], view:localStorage.getItem('pickleballView')||'player', ready:false };
 let unsubscribers = [];
 
+
+function friendlyFirebaseError(error){
+  const code = error?.code || '';
+  const map = {
+    'auth/email-already-in-use': 'This email is already registered. Please log in or tap Forgot Password.',
+    'auth/weak-password': 'Password must be at least 6 characters.',
+    'auth/invalid-email': 'Please enter a valid email address.',
+    'auth/missing-password': 'Please enter your password.',
+    'auth/invalid-credential': 'Email or password is incorrect. Please try again.',
+    'auth/wrong-password': 'Password is incorrect. Please try again.',
+    'auth/user-not-found': 'No account found with this email. Please create an account first.',
+    'auth/network-request-failed': 'Network error. Please check your internet connection.',
+    'auth/too-many-requests': 'Too many attempts. Please wait a few minutes and try again.',
+    'permission-denied': 'You do not have permission to do that. Please contact the coordinator.'
+  };
+  return map[code] || (error?.message ? error.message.replace('Firebase: Error ', '').replace(/[()]/g, '') : 'Something went wrong. Please try again.');
+}
+
 const esc = (s='') => String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 const idSafe = s => String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
 const today = () => new Date().toISOString().slice(0,10);
