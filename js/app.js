@@ -5,13 +5,13 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
 import {
   collection, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc,
-  onSnapshot, serverTimestamp, query, orderBy
+  onSnapshot, serverTimestamp, query, orderBy, arrayUnion, limit
 } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
 
 const $ = sel => document.querySelector(sel);
 const appEl = $('#app');
 const DEFAULT_LOCATIONS = ['DinkHouse','Liberty Park','Cerritos Courts'];
-let state = { user:null, profile:null, events:[], locations:[], view:localStorage.getItem('pickleballView')||'player', ready:false };
+let state = { user:null, profile:null, events:[], locations:[], notifications:[], showNotifications:false, view:localStorage.getItem('pickleballView')||'player', ready:false };
 let unsubscribers = [];
 
 
@@ -41,13 +41,13 @@ function normalizeChildren(c){ if(Array.isArray(c)) return c.filter(Boolean); if
 function eventCounts(ev){ const signups=Array.isArray(ev.signups)?ev.signups:[]; return {playing:signups.filter(s=>s.status==='playing').length, interested:signups.filter(s=>s.status==='interested').length,total:signups.length}; }
 function isClosedByTime(ev){ if(ev.cutoff==='open') return false; const hrs=Number(ev.cutoff||0); if(!hrs||!ev.date||!ev.start) return false; return Date.now() >= new Date(`${ev.date}T${ev.start}:00`).getTime() - hrs*3600000; }
 function eventStatus(ev){ const c=eventCounts(ev); if(ev.closed) return {label:'CLOSED FOR RENOVATION',cls:'red'}; if(ev.full || (Number(ev.max||0)>0 && c.playing>=Number(ev.max))) return {label:'FULLY BOOKED',cls:'red'}; if(ev.booked) return {label:'BOOKED',cls:'green'}; return {label:'Waiting',cls:'yellow'}; }
-function canSignup(ev){ const st=eventStatus(ev); return st.label!=='CLOSED' && st.label!=='FULLY BOOKED' && !isClosedByTime(ev); }
+function canSignup(ev){ const st=eventStatus(ev); return st.label!=='CLOSED FOR RENOVATION' && st.label!=='FULLY BOOKED' && !isClosedByTime(ev); }
 function cleanup(){ unsubscribers.forEach(u=>u&&u()); unsubscribers=[]; }
 function nav(view){ state.view=view; localStorage.setItem('pickleballView',view); render(); }
 window.nav = nav;
 
 onAuthStateChanged(auth, async user => {
-  cleanup(); state.user=user; state.profile=null; state.events=[]; state.locations=[]; state.ready=false;
+  cleanup(); state.user=user; state.profile=null; state.events=[]; state.locations=[]; state.notifications=[]; state.showNotifications=false; state.ready=false;
   if(!user){ renderLogin(); return; }
   await ensureProfile(user);
   startListeners();
@@ -66,6 +66,8 @@ function startListeners(){
   const evQ=query(collection(db,'events'), orderBy('date'));
   unsubscribers.push(onSnapshot(evQ, snap=>{ state.events=snap.docs.map(d=>({id:d.id,...d.data(),signups:Array.isArray(d.data().signups)?d.data().signups:[]})); state.ready=true; render(); }, err=>renderError(err)));
   unsubscribers.push(onSnapshot(collection(db,'locations'), snap=>{ state.locations=snap.docs.map(d=>({id:d.id,...d.data()})); render(); }, err=>console.error(err)));
+  const notifQ=query(collection(db,'notifications'), orderBy('createdAt','desc'), limit(50));
+  unsubscribers.push(onSnapshot(notifQ, snap=>{ state.notifications=snap.docs.map(d=>({id:d.id,...d.data(),readBy:Array.isArray(d.data().readBy)?d.data().readBy:[]})); render(); }, err=>console.error(err)));
   unsubscribers.push(onSnapshot(doc(db,'users',state.user.uid), snap=>{ if(snap.exists()){state.profile={id:state.user.uid,...snap.data(),children:normalizeChildren(snap.data().children)}; render();} }));
 }
 function renderError(err){ appEl.innerHTML=`<div class="wrap"><div class="card"><h2>Firebase Error</h2><div class="error">${esc(err.message)}</div><p class="small">Check Firebase config and Firestore rules.</p></div></div>`; }
@@ -80,9 +82,59 @@ window.forgotPassword=async()=>{const email=$('#email')?.value.trim()||prompt('E
 window.logout=async()=>{await signOut(auth);};
 
 function isCoordinator(){ return state.profile?.role === 'coordinator' || state.profile?.role === 'admin'; }
+
+function unreadNotifications(){ return state.notifications.filter(n=>!(Array.isArray(n.readBy)&&n.readBy.includes(state.user.uid))).length; }
+function notificationIcon(type){ return {booked:'📢',full:'👥',renovation:'🚧',event:'🎉',info:'🔔'}[type] || '🔔'; }
+function notificationTime(n){
+  try{
+    const d = n.createdAt?.toDate ? n.createdAt.toDate() : null;
+    if(!d) return '';
+    const diff = Date.now()-d.getTime();
+    if(diff < 60000) return 'Just now';
+    if(diff < 3600000) return Math.floor(diff/60000)+' min ago';
+    if(diff < 86400000) return Math.floor(diff/3600000)+' hr ago';
+    return d.toLocaleDateString(undefined,{month:'short',day:'numeric'});
+  }catch(e){return '';}
+}
+function renderNotificationButton(){
+  const count=unreadNotifications();
+  return `<button class="notifBtn" onclick="toggleNotifications()">🔔${count?` <span>${count}</span>`:''}</button>`;
+}
+function renderNotificationDrawer(){
+  if(!state.showNotifications) return '';
+  const items=state.notifications.length?state.notifications.map(n=>{
+    const unread=!(Array.isArray(n.readBy)&&n.readBy.includes(state.user.uid));
+    return `<div class="notifItem ${unread?'unread':''}"><div class="notifIcon">${notificationIcon(n.type)}</div><div><b>${esc(n.title||'Notification')}</b><p>${esc(n.message||'')}</p><small>${notificationTime(n)}</small></div></div>`;
+  }).join(''):'<p class="small">No notifications yet.</p>';
+  return `<div class="notifPanel"><div class="notifHeader"><h3>Notifications</h3><button class="secondary" onclick="markNotificationsRead()">Mark all read</button></div>${items}</div>`;
+}
+window.toggleNotifications=()=>{ state.showNotifications=!state.showNotifications; render(); };
+window.markNotificationsRead=async()=>{
+  const unread=state.notifications.filter(n=>!(Array.isArray(n.readBy)&&n.readBy.includes(state.user.uid)));
+  await Promise.all(unread.map(n=>updateDoc(doc(db,'notifications',n.id),{readBy:arrayUnion(state.user.uid)})));
+  state.showNotifications=false;
+};
+async function createNotification({title,message,type='info',eventId=''}){
+  try{
+    await addDoc(collection(db,'notifications'),{title,message,type,eventId,target:'all',readBy:[],createdAt:serverTimestamp()});
+  }catch(e){ console.error('Notification failed',e); }
+}
+function statusNotificationData(ev, data, isNew){
+  const dateLabel = fmtDate(data.date||ev?.date||'');
+  const time = `${timeLabel(data.start||ev?.start)} - ${timeLabel(data.end||ev?.end)}`;
+  const loc = data.location||ev?.location||'Pickleball';
+  if(isNew) return {type:'event',title:`New play date added: ${loc}`,message:`${dateLabel} • ${time}`,eventId:''};
+  const oldStatus=eventStatus(ev||{}).label;
+  const nextStatus=eventStatus({...ev,...data}).label;
+  if(oldStatus===nextStatus) return null;
+  if(nextStatus==='BOOKED') return {type:'booked',title:`${loc} is BOOKED`,message:`${dateLabel} • ${time}. ${data.details||ev?.details||''}`,eventId:ev?.id||''};
+  if(nextStatus==='FULLY BOOKED') return {type:'full',title:`${loc} is FULLY BOOKED`,message:`${dateLabel} • ${time}.`,eventId:ev?.id||''};
+  if(nextStatus==='CLOSED FOR RENOVATION') return {type:'renovation',title:`${loc} Closed for Renovation`,message:`${data.details||ev?.details||'This location/event is temporarily closed for renovation.'}`,eventId:ev?.id||''};
+  return null;
+}
 function renderApp(){
  const role=isCoordinator()?'Coordinator':'Player';
- appEl.innerHTML=`<div class="wrap"><div class="hero"><h1>🏓 Pickleball Signup</h1><p>${role}: ${esc(state.profile?.name||state.user.email)}</p></div><div class="tabs"><button class="tab ${state.view==='player'?'active':''}" onclick="nav('player')">Player</button><button class="tab ${state.view==='calendar'?'active':''}" onclick="nav('calendar')">Calendar</button><button class="tab ${state.view==='profile'?'active':''}" onclick="nav('profile')">Profile</button>${isCoordinator()?`<button class="tab ${state.view==='coordinator'?'active':''}" onclick="nav('coordinator')">Coordinator</button>`:''}<button class="tab" onclick="logout()">Logout</button></div><main id="main"></main><div class="footer">Firebase connected • Shared live data</div></div>`;
+ appEl.innerHTML=`<div class="wrap"><div class="hero heroWithBell"><div><h1>🏓 Pickleball Signup</h1><p>${role}: ${esc(state.profile?.name||state.user.email)}</p></div>${renderNotificationButton()}</div>${renderNotificationDrawer()}<div class="tabs"><button class="tab ${state.view==='player'?'active':''}" onclick="nav('player')">Player</button><button class="tab ${state.view==='calendar'?'active':''}" onclick="nav('calendar')">Calendar</button><button class="tab ${state.view==='profile'?'active':''}" onclick="nav('profile')">Profile</button>${isCoordinator()?`<button class="tab ${state.view==='coordinator'?'active':''}" onclick="nav('coordinator')">Coordinator</button>`:''}<button class="tab" onclick="logout()">Logout</button></div><main id="main"></main><div class="footer">Firebase connected • Shared live data</div></div>`;
  if(state.view==='calendar') renderCalendar(); else if(state.view==='profile') renderProfile(); else if(state.view==='coordinator' && isCoordinator()) renderCoordinator(); else renderPlayer();
 }
 function eventCardPlayer(ev){
@@ -108,7 +160,7 @@ window.deleteChild=async(i)=>{const children=normalizeChildren(state.profile.chi
 function locationOptions(){ const names=state.locations.map(l=>l.name||l.location||l.title||l.id).filter(Boolean); const all=names.length?names:DEFAULT_LOCATIONS; return all.map(l=>`<option>${esc(l)}</option>`).join(''); }
 function renderCoordinator(){ const events=[...state.events].sort((a,b)=>(a.date+a.start).localeCompare(b.date+b.start)); $('#main').innerHTML=`<div class="dash"><div class="stat"><span>Events</span><b>${state.events.length}</b></div><div class="stat"><span>Users</span><b>Live</b></div><div class="stat"><span>Mode</span><b>Cloud</b></div></div><div class="card"><h2>Create / Edit Event</h2><input id="editId" type="hidden"><div class="row"><div><label>Date</label><input id="date" type="date" value="${today()}"></div><div><label>Start</label><input id="start" type="time" value="19:00"></div><div><label>End</label><input id="end" type="time" value="21:00"></div></div><label>Location</label><select id="location">${locationOptions()}</select><div class="row"><div><label>Signup Cutoff</label><select id="cutoff"><option value="open">Keep open</option><option value="1">Close signup 1 hour before</option><option value="2">Close signup 2 hours before</option><option value="4">Close signup 4 hours before</option></select></div><div><label>Max players</label><input id="max" type="number" value="12"></div></div><div class="toggleLine"><input id="booked" type="checkbox"><b>Court Booked?</b></div><div class="toggleLine"><input id="closed" type="checkbox"><b>Closed for Renovation?</b></div><div class="toggleLine"><input id="full" type="checkbox"><b>Mark Fully Booked?</b></div><label>Booking Details</label><textarea id="details"></textarea><div class="toggleLine"><input id="feeOn" type="checkbox"><b>Collect court fee?</b></div><div class="row"><input id="fee" placeholder="Fee e.g. 5"><input id="payment" placeholder="Venmo @name, Zelle email, cash"></div><div class="row" style="margin-top:12px"><button onclick="saveEvent()">Save Event</button><button class="secondary" onclick="clearEventForm()">Clear</button></div></div><div class="card"><h2>Events</h2>${events.length?events.map(eventCardCoord).join(''):'<p class="small">No events yet.</p>'}</div><div class="card"><h2>Manage Locations</h2>${state.locations.map(l=>`<div class="person"><b>${esc(l.name||l.location||l.title||l.id)}</b><span><button class="secondary" onclick="renameLocation('${l.id}')">Edit</button> <button class="danger" onclick="deleteLocation('${l.id}')">Delete</button></span></div>`).join('')||'<p class="small">No locations yet.</p>'}<div class="row"><input id="newLocation" placeholder="New location"><button onclick="addLocation()">Add Location</button></div></div>`; }
 function eventCardCoord(ev){ const c=eventCounts(ev); return `<div class="card" style="box-shadow:none"><div class="eventTop"><div><div class="big">${fmtDate(ev.date)} — ${esc(ev.location)}</div><p>${timeLabel(ev.start)} - ${timeLabel(ev.end)} • ${c.playing} playing • ${c.interested} interested</p></div><span class="badge ${eventStatus(ev).cls}">${eventStatus(ev).label}</span></div><div class="row"><button class="secondary" onclick="editEvent('${ev.id}')">Edit</button><button class="danger" onclick="deleteEvent('${ev.id}')">Delete</button><button onclick="exportCsv('${ev.id}')">Export CSV</button></div><h3>Players</h3>${(ev.signups||[]).length?(ev.signups||[]).map(s=>`<div class="person"><span>${s.status==='playing'?'✅':'👍'} <b>${esc(s.name)}</b> <span class="small">${esc(s.email||s.owner||'')}</span> ${s.paid?'<span class="badge green">Paid</span>':''}</span><span><button class="secondary" onclick="toggleCheck('${ev.id}','${s.id}')">${s.checked?'Checked In':'Check In'}</button> <button class="danger" onclick="removeSignup('${ev.id}','${s.id}')">Remove</button></span></div>`).join(''):'<p class="small">No signups yet.</p>'}</div>`; }
-window.saveEvent=async()=>{ const id=$('#editId').value; const data={date:$('#date').value,start:$('#start').value,end:$('#end').value,location:$('#location').value,cutoff:$('#cutoff').value,max:$('#max').value,booked:$('#booked').checked,closed:$('#closed').checked,full:$('#full').checked,details:$('#details').value,feeOn:$('#feeOn').checked,fee:$('#fee').value,payment:$('#payment').value}; if(!data.date||!data.start||!data.end||!data.location)return alert('Complete date, time, and location.'); if(id) await updateDoc(doc(db,'events',id),data); else await addDoc(collection(db,'events'),{...data,signups:[],createdAt:serverTimestamp()}); clearEventForm(); };
+window.saveEvent=async()=>{ const id=$('#editId').value; const data={date:$('#date').value,start:$('#start').value,end:$('#end').value,location:$('#location').value,cutoff:$('#cutoff').value,max:$('#max').value,booked:$('#booked').checked,closed:$('#closed').checked,full:$('#full').checked,details:$('#details').value,feeOn:$('#feeOn').checked,fee:$('#fee').value,payment:$('#payment').value}; if(!data.date||!data.start||!data.end||!data.location)return alert('Complete date, time, and location.'); if(id){ const oldEv=state.events.find(e=>e.id===id); await updateDoc(doc(db,'events',id),data); const n=statusNotificationData(oldEv,data,false); if(n) await createNotification(n); } else { const ref=await addDoc(collection(db,'events'),{...data,signups:[],createdAt:serverTimestamp()}); const n=statusNotificationData(null,data,true); if(n) await createNotification({...n,eventId:ref.id}); } clearEventForm(); };
 window.editEvent=(id)=>{ const e=state.events.find(x=>x.id===id); ['date','start','end','location','cutoff','max','details','fee','payment'].forEach(k=>{const el=$('#'+k); if(el) el.value=e[k]||''}); $('#editId').value=e.id; $('#booked').checked=!!e.booked; $('#closed').checked=!!e.closed; $('#full').checked=!!e.full; $('#feeOn').checked=!!e.feeOn; window.scrollTo({top:0,behavior:'smooth'}); };
 window.clearEventForm=()=>renderCoordinator();
 window.deleteEvent=async(id)=>{ if(confirm('Delete this event?')) await deleteDoc(doc(db,'events',id)); };

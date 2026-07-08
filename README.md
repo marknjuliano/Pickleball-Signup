@@ -1,3 +1,17 @@
-# Pickleball Signup v2.1.3
+# Pickleball Signup v2.2
 
-Firebase-connected version. Update: Player tab now displays Coordinator Details / Booking Details even when event is closed for renovation or not yet booked.
+Firebase-connected version.
+
+Updated:
+- Notification Center added
+- Bell icon with unread badge
+- Notifications saved in Firestore collection: `notifications`
+- Mark all as read
+- Automatic notifications for new event, booked, fully booked, and closed for renovation
+- Player details display retained
+
+Collections used:
+- users
+- events
+- locations
+- notifications
