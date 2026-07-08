@@ -1,11 +1,3 @@
-# Pickleball Signup v2.0 Firebase Edition
+# Pickleball Signup v2.1 Firebase
 
-This app is connected to the existing Firebase project `pickleballsignup-64eda`.
-
-Upload/replace these files in the GitHub Pages repo:
-- index.html
-- css/style.css
-- js/firebase.js
-- js/app.js
-
-Existing Firebase Authentication users and Firestore data are preserved.
+Firebase-connected GitHub Pages app. v2.1 adds user-friendly Firebase Authentication error messages.
