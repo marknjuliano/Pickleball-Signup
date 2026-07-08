@@ -1,18 +1,5 @@
-# Pickleball Signup v2.2.3
+# Pickleball Signup v2.3
 
-Firebase-connected version.
+Firebase-connected version. Visual redesign with featured next play date, collapsed future event cards, polished notification bell, and header coordinator subtitle removed.
 
-Updates:
-- Notification Center
-- Player booking/details display
-- Status options now support multiple selections:
-  - Court Booked
-  - Closed for Renovation
-  - Closed for Event
-  - Cancelled
-  - Fully Booked
-
-
-## v2.2.3
-- Who’s Coming list is collapsed by default.
-- Players can press Expand to view the signup list.
+Upload/replace index.html, css, js, and README.md in GitHub Pages.

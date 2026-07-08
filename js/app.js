@@ -152,10 +152,10 @@ function statusNotificationData(ev,data,isNew){
 }
 function renderApp(){
  const role=isCoordinator()?'Coordinator':'Player';
- appEl.innerHTML=`<div class="wrap"><div class="hero heroWithBell"><div><h1>🏓 Pickleball Signup</h1><p>${role}: ${esc(state.profile?.name||state.user.email)}</p></div>${renderNotificationButton()}</div><div class="tabs"><button class="tab ${state.view==='player'?'active':''}" onclick="nav('player')">Player</button><button class="tab ${state.view==='calendar'?'active':''}" onclick="nav('calendar')">Calendar</button><button class="tab ${state.view==='profile'?'active':''}" onclick="nav('profile')">Profile</button>${isCoordinator()?`<button class="tab ${state.view==='coordinator'?'active':''}" onclick="nav('coordinator')">Coordinator</button>`:''}<button class="tab" onclick="logout()">Logout</button></div><main id="main"></main><div class="footer">Firebase connected • Shared live data</div></div>`;
+ appEl.innerHTML=`<div class="wrap"><div class="hero heroWithBell"><div><h1>🏓 Pickleball Signup</h1></div>${renderNotificationButton()}</div><div class="tabs"><button class="tab ${state.view==='player'?'active':''}" onclick="nav('player')">Player</button><button class="tab ${state.view==='calendar'?'active':''}" onclick="nav('calendar')">Calendar</button><button class="tab ${state.view==='profile'?'active':''}" onclick="nav('profile')">Profile</button>${isCoordinator()?`<button class="tab ${state.view==='coordinator'?'active':''}" onclick="nav('coordinator')">Coordinator</button>`:''}<button class="tab" onclick="logout()">Logout</button></div><main id="main"></main><div class="footer">Firebase connected • Shared live data</div></div>`;
  if(state.view==='calendar') renderCalendar(); else if(state.view==='profile') renderProfile(); else if(state.view==='coordinator' && isCoordinator()) renderCoordinator(); else renderPlayer();
 }
-function eventCardPlayer(ev){
+function playerEventInner(ev, opts={}){
  const c=eventCounts(ev), st=eventStatus(ev), signups=Array.isArray(ev.signups)?ev.signups:[], mine=signups.filter(s=>s.owner===state.user.uid || s.email===state.user.email), family=[state.profile.name,...normalizeChildren(state.profile.children)].filter(Boolean), closed=!canSignup(ev);
  const statusBox = (()=>{
   if(ev.cancelled) return `<div class="notice warn"><b>Event cancelled.</b><br>Please see coordinator details below.</div>`;
@@ -167,10 +167,37 @@ function eventCardPlayer(ev){
  })();
  const detailBox = ev.details ? `<div class="notice info"><b>📢 Coordinator Details</b><br>${esc(ev.details)}</div>` : '';
  const closedReason = ev.cancelled?'Cancelled':ev.closedEvent?'Closed for event':ev.closed?'Closed for renovation':st.label==='FULLY BOOKED'?'Fully booked':'Signup closed';
- return `<div class="card"><div class="eventTop"><div><div class="big">${fmtDate(ev.date)}</div><p>📍 <b>${esc(ev.location)}</b><br>🕒 ${timeLabel(ev.start)} - ${timeLabel(ev.end)}</p></div><div>${c.playing>=6?'<span class="badge red">6+ Ready</span>':''}${statusBadges(ev)}</div></div>${statusBox}${detailBox}${ev.feeOn?feeHtml(ev):''}<h3>Sign up / Update my family</h3>${closed?`<p><span class="badge red">${closedReason}</span></p>`:family.map(n=>{const ex=mine.find(s=>s.name===n);return `<div class="person"><div><b>${esc(n)}</b><div class="small">${ex?esc(ex.status):'Not signed up'}</div></div><div class="actions"><button class="secondary" onclick="upsertSignup('${ev.id}','${idSafe(n)}','interested')">Interested</button><button class="success" onclick="upsertSignup('${ev.id}','${idSafe(n)}','playing')">Playing</button>${ex?`<button class="danger" onclick="removeMySignup('${ev.id}','${idSafe(n)}')">Remove</button>`:''}</div></div>`}).join('')}<details class="comingDetails"><summary>Who’s Coming <span class="small">${signups.length} signed up</span></summary><div class="comingList">${signups.length?signups.map(s=>`<div class="person"><span>${s.status==='playing'?'✅':'👍'} <b>${esc(s.name)}</b> <span class="small">${esc(s.status)}</span></span></div>`).join(''):'<p class="small">No signups yet.</p>'}</div></details></div>`;
+ const signupHtml = closed
+  ? `<p><span class="badge red">${closedReason}</span></p>`
+  : family.map(n=>{const ex=mine.find(s=>s.name===n);return `<div class="person"><div><b>${esc(n)}</b><div class="small">${ex?esc(ex.status):'Not signed up'}</div></div><div class="actions"><button class="secondary" onclick="upsertSignup('${ev.id}','${idSafe(n)}','interested')">Interested</button><button class="success" onclick="upsertSignup('${ev.id}','${idSafe(n)}','playing')">Playing</button>${ex?`<button class="danger" onclick="removeMySignup('${ev.id}','${idSafe(n)}')">Remove</button>`:''}</div></div>`}).join('');
+ return `${statusBox}${detailBox}${ev.feeOn?feeHtml(ev):''}<h3>Sign up / Update my family</h3>${signupHtml}<details class="comingDetails"><summary>Who’s Coming <span class="small">${signups.length} signed up</span></summary><div class="comingList">${signups.length?signups.map(s=>`<div class="person"><span>${s.status==='playing'?'✅':'👍'} <b>${esc(s.name)}</b> <span class="small">${esc(s.status)}</span></span></div>`).join(''):'<p class="small">No signups yet.</p>'}</div></details>`;
+}
+function eventCardPlayer(ev){
+ const c=eventCounts(ev);
+ return `<div class="card"><div class="eventTop"><div><div class="big">${fmtDate(ev.date)}</div><p>📍 <b>${esc(ev.location)}</b><br>🕒 ${timeLabel(ev.start)} - ${timeLabel(ev.end)}</p></div><div>${c.playing>=6?'<span class="badge red">6+ Ready</span>':''}${statusBadges(ev)}</div></div>${playerEventInner(ev)}</div>`;
+}
+function featuredEventCard(ev){
+ const c=eventCounts(ev);
+ const d=new Date((ev.date||today())+'T12:00:00');
+ const day=d.toLocaleDateString(undefined,{weekday:'short'});
+ const mon=d.toLocaleDateString(undefined,{month:'short'}).toUpperCase();
+ const num=d.toLocaleDateString(undefined,{day:'numeric'});
+ const year=d.getFullYear();
+ return `<section class="featuredEvent"><div class="featuredRibbon">⭐ NEXT PLAY DATE</div><div class="featuredDate"><span>${day}</span><b>${mon}</b><strong>${num}</strong><em>${year}</em></div><div class="featuredMain"><div class="featuredTop"><div><h2>${esc(ev.location)}</h2><p>📍 ${esc(ev.location)}<br>🕒 ${timeLabel(ev.start)} - ${timeLabel(ev.end)}</p></div><div class="featuredBadges">${c.playing>=6?'<span class="badge red">6+ Ready</span>':''}${statusBadges(ev)}</div></div>${playerEventInner(ev)}<div class="pickleArt">🏓</div></div></section>`;
+}
+function collapsedEventCard(ev){
+ const c=eventCounts(ev);
+ return `<details class="eventDetailsCard"><summary><div class="miniDate"><span>${new Date((ev.date||today())+'T12:00:00').toLocaleDateString(undefined,{weekday:'short'})}</span><b>${new Date((ev.date||today())+'T12:00:00').toLocaleDateString(undefined,{month:'short'}).toUpperCase()}</b><strong>${new Date((ev.date||today())+'T12:00:00').toLocaleDateString(undefined,{day:'numeric'})}</strong></div><div class="miniInfo"><b>${esc(ev.location)}</b><span>🕒 ${timeLabel(ev.start)} - ${timeLabel(ev.end)}</span></div><div class="miniStatus">${statusBadges(ev)}</div><div class="miniCount">👥 ${c.total} signed up</div><button class="secondary expandBtn" type="button">Expand</button></summary><div class="eventExpanded">${playerEventInner(ev)}</div></details>`;
+}
+function renderPlayer(){
+ const events=[...state.events].sort((a,b)=>(a.date+a.start).localeCompare(b.date+b.start));
+ const upcoming=events.filter(e=>!e.date || new Date(e.date+'T23:59:59').getTime()>=Date.now());
+ const next=upcoming[0] || events[0];
+ const others=events.filter(e=>!next || e.id!==next.id);
+ if(!events.length){ $('#main').innerHTML=`<div class="card"><h2>No play dates yet</h2><p class="small">Waiting for coordinator to create the first event.</p></div>`; return; }
+ $('#main').innerHTML=`${next?`<div class="sectionTitle"><h2>Upcoming Events</h2><p class="small">Tap Expand to view details and sign up.</p></div>${featuredEventCard(next)}`:''}${others.length?`<h2 class="otherTitle">Other Events</h2>${others.map(collapsedEventCard).join('')}`:''}`;
 }
 function feeHtml(ev){ let v=ev.payment||''; const venmoMatch=String(v).match(/@([A-Za-z0-9_.-]+)/); const venmo=venmoMatch?venmoMatch[1]:''; return `<div class="feeBox"><b>💵 Court Fee:</b> $${esc(ev.fee||'')}<br><b>Payment:</b> ${esc(v)}<div style="margin-top:10px">${venmo?`<button class="secondary" onclick="window.open('https://venmo.com/${venmo}','_blank')">Pay with Venmo</button>`:''}<button class="secondary" onclick="markPaid('${ev.id}')">I Paid</button></div></div>`; }
-function renderPlayer(){ const events=[...state.events].sort((a,b)=>(a.date+a.start).localeCompare(b.date+b.start)); $('#main').innerHTML=`${events.length?events.map(eventCardPlayer).join(''):`<div class="card"><h2>No play dates yet</h2><p class="small">Waiting for coordinator to create the first event.</p></div>`}`; }
 window.upsertSignup=async(eid,name,status)=>{const ev=state.events.find(e=>e.id===eid); if(!ev)return; let signups=[...(ev.signups||[])]; let s=signups.find(x=>(x.owner===state.user.uid||x.email===state.user.email)&&x.name===name); if(!canSignup(ev)&&!s)return alert('This play date is closed, cancelled, or fully booked.'); if(s){s.status=status;s.updatedAt=new Date().toISOString();} else signups.push({id:crypto.randomUUID(),owner:state.user.uid,email:state.user.email,name,status,checked:false,paid:false,createdAt:new Date().toISOString()}); await updateDoc(doc(db,'events',eid),{signups});};
 window.removeMySignup=async(eid,name)=>{const ev=state.events.find(e=>e.id===eid); let signups=(ev.signups||[]).filter(s=>!((s.owner===state.user.uid||s.email===state.user.email)&&s.name===name)); await updateDoc(doc(db,'events',eid),{signups});};
 window.markPaid=async(eid)=>{const ev=state.events.find(e=>e.id===eid); let signups=[...(ev.signups||[])]; signups.forEach(s=>{if(s.owner===state.user.uid||s.email===state.user.email)s.paid=true;}); await updateDoc(doc(db,'events',eid),{signups}); alert('Marked as paid. Coordinator will verify payment.');};
