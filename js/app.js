@@ -123,6 +123,16 @@ function renderNotificationDrawer(){
   return `<div class="notifPanel"><div class="notifHeader"><h3>Notifications</h3><div class="notifActions"><button class="secondary" onclick="markNotificationsRead()" ${unreadNotifications()?'':'disabled'}>Mark all read</button><button class="ghost closeNotif" onclick="toggleNotifications()">✕</button></div></div>${items}</div>`;
 }
 window.toggleNotifications=()=>{ state.showNotifications=!state.showNotifications; render(); };
+
+window.toggleEventDetails=(event,btn)=>{
+  event.preventDefault();
+  event.stopPropagation();
+  const d=btn.closest('details');
+  if(!d) return false;
+  d.open=!d.open;
+  btn.textContent=d.open?'Collapse':'Expand';
+  return false;
+};
 window.markNotificationsRead=async()=>{
   const unread=state.notifications.filter(n=>!(Array.isArray(n.readBy)&&n.readBy.includes(state.user.uid)));
   await Promise.all(unread.map(n=>updateDoc(doc(db,'notifications',n.id),{readBy:arrayUnion(state.user.uid)})));
@@ -187,7 +197,7 @@ function featuredEventCard(ev){
 }
 function collapsedEventCard(ev){
  const c=eventCounts(ev);
- return `<details class="eventDetailsCard"><summary><div class="miniDate"><span>${new Date((ev.date||today())+'T12:00:00').toLocaleDateString(undefined,{weekday:'short'})}</span><b>${new Date((ev.date||today())+'T12:00:00').toLocaleDateString(undefined,{month:'short'}).toUpperCase()}</b><strong>${new Date((ev.date||today())+'T12:00:00').toLocaleDateString(undefined,{day:'numeric'})}</strong></div><div class="miniInfo"><b>${esc(ev.location)}</b><span>🕒 ${timeLabel(ev.start)} - ${timeLabel(ev.end)}</span></div><div class="miniStatus">${statusBadges(ev)}</div><div class="miniCount">👥 ${c.total} signed up</div><button class="secondary expandBtn" type="button">Expand</button></summary><div class="eventExpanded">${playerEventInner(ev)}</div></details>`;
+ return `<details class="eventDetailsCard"><summary><div class="miniDate"><span>${new Date((ev.date||today())+'T12:00:00').toLocaleDateString(undefined,{weekday:'short'})}</span><b>${new Date((ev.date||today())+'T12:00:00').toLocaleDateString(undefined,{month:'short'}).toUpperCase()}</b><strong>${new Date((ev.date||today())+'T12:00:00').toLocaleDateString(undefined,{day:'numeric'})}</strong></div><div class="miniInfo"><b>${esc(ev.location)}</b><span>🕒 ${timeLabel(ev.start)} - ${timeLabel(ev.end)}</span></div><div class="miniStatus">${statusBadges(ev)}</div><div class="miniCount">👥 ${c.total} signed up</div><button class="secondary expandBtn" type="button" onclick="toggleEventDetails(event,this)">Expand</button></summary><div class="eventExpanded">${playerEventInner(ev)}</div></details>`;
 }
 function renderPlayer(){
  const events=[...state.events].sort((a,b)=>(a.date+a.start).localeCompare(b.date+b.start));
