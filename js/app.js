@@ -183,7 +183,7 @@ function featuredEventCard(ev){
  const mon=d.toLocaleDateString(undefined,{month:'short'}).toUpperCase();
  const num=d.toLocaleDateString(undefined,{day:'numeric'});
  const year=d.getFullYear();
- return `<section class="featuredEvent"><div class="featuredRibbon">⭐ NEXT PLAY DATE</div><div class="featuredDate"><span>${day}</span><b>${mon}</b><strong>${num}</strong><em>${year}</em></div><div class="featuredMain"><div class="featuredTop"><div><h2>${esc(ev.location)}</h2><p>📍 ${esc(ev.location)}<br>🕒 ${timeLabel(ev.start)} - ${timeLabel(ev.end)}</p></div><div class="featuredBadges">${c.playing>=6?'<span class="badge red">6+ Ready</span>':''}${statusBadges(ev)}</div></div>${playerEventInner(ev)}<div class="pickleArt">🏓</div></div></section>`;
+ return `<section class="featuredEvent"><div class="featuredRibbon">⭐ NEXT PLAY DATE</div><div class="featuredDate"><span>${day}</span><b>${mon}</b><strong>${num}</strong><em>${year}</em></div><div class="featuredMain"><div class="featuredTop"><div><h2>${esc(ev.location)}</h2><p>📍 ${esc(ev.location)}<br>🕒 ${timeLabel(ev.start)} - ${timeLabel(ev.end)}</p></div><div class="featuredBadges">${c.playing>=6?'<span class="badge red">6+ Ready</span>':''}${statusBadges(ev)}</div></div>${playerEventInner(ev)}<div class="pickleArt" aria-hidden="true"><span class="pbPaddle"></span><span class="pbBall"></span></div></div></section>`;
 }
 function collapsedEventCard(ev){
  const c=eventCounts(ev);

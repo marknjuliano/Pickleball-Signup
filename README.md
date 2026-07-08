@@ -1,5 +1,3 @@
-# Pickleball Signup v2.3
+# Pickleball Signup v2.3.1
 
-Firebase-connected version. Visual redesign with featured next play date, collapsed future event cards, polished notification bell, and header coordinator subtitle removed.
-
-Upload/replace index.html, css, js, and README.md in GitHub Pages.
+Visual redesign polish: removed header coordinator text and replaced decorative ping-pong emoji with a CSS pickleball paddle/ball positioned away from buttons. Firebase-connected version.
