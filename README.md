@@ -1,17 +1,16 @@
-# Pickleball Signup v2.2
+# Pickleball Signup v2.2.1
 
-Firebase-connected version.
+Firebase-connected version with polished Notification Center.
 
-Updated:
-- Notification Center added
-- Bell icon with unread badge
-- Notifications saved in Firestore collection: `notifications`
+## Added
+- Notification bell with unread badge
+- Collapsible notification dropdown
 - Mark all as read
-- Automatic notifications for new event, booked, fully booked, and closed for renovation
-- Player details display retained
+- Notification color accents by type
+- Manual coordinator notification publisher
+- Auto-notifications for new events and major status changes
 
-Collections used:
-- users
-- events
-- locations
-- notifications
+## Preserved
+- Existing Firebase project
+- Existing Firestore collections: users, events, locations, notifications
+- Existing GitHub Pages setup
