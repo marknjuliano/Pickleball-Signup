@@ -1,4 +1,4 @@
-# Pickleball Signup v2.2.2
+# Pickleball Signup v2.2.3
 
 Firebase-connected version.
 
@@ -11,3 +11,8 @@ Updates:
   - Closed for Event
   - Cancelled
   - Fully Booked
+
+
+## v2.2.3
+- Who’s Coming list is collapsed by default.
+- Players can press Expand to view the signup list.
