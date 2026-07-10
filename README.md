@@ -1,6 +1,12 @@
-# Pickleball Signup v2.4.1
+# Pickleball Signup v2.4.2 — PowerDink Black/Neon Edition
 
-Professional integrated PowerDink header with smoother logo edges, responsive mobile layout, and preserved Firebase Authentication/Firestore connectivity.
+Firebase-connected GitHub Pages app.
 
-## Firebase
-Uses the existing Firebase project configuration in `js/firebase.js`. Existing users, events, signups, locations, and notifications are preserved.
+## Changes
+- Replaced the blue header with the supplied black/neon PowerDink background.
+- Preserved the PowerDink logo, title, and working notification bell.
+- Improved mobile header scaling and contrast.
+- Firebase Authentication and Firestore configuration unchanged.
+
+## Upload
+Upload the contents of this folder to the root of the existing GitHub repository and commit the changes.
