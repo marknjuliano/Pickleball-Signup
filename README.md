@@ -1,12 +1,11 @@
-# Pickleball Signup v2.4.2 — PowerDink Black/Neon Edition
+# Pickleball Signup v2.5
 
-Firebase-connected GitHub Pages app.
+Firebase-connected PowerDink edition.
 
 ## Changes
-- Replaced the blue header with the supplied black/neon PowerDink background.
-- Preserved the PowerDink logo, title, and working notification bell.
-- Improved mobile header scaling and contrast.
-- Firebase Authentication and Firestore configuration unchanged.
-
-## Upload
-Upload the contents of this folder to the root of the existing GitHub repository and commit the changes.
+- Player tab shows only the current and next upcoming event.
+- Past events are hidden from players.
+- Calendar tab now uses a real monthly calendar; select a date to view event details below.
+- Coordinator events are collapsible.
+- Past coordinator events remain available with Edit, Delete, and Export options.
+- Existing Firebase Authentication, Firestore collections, users, events, signups, locations, and notifications are preserved.
