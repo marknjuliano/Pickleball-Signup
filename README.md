@@ -1,11 +1,15 @@
-# Pickleball Signup v2.5
+# Pickleball Signup v2.4
 
-Firebase-connected PowerDink edition.
+Firebase-connected PowerDink branded release.
 
-## Changes
-- Player tab shows only the current and next upcoming event.
-- Past events are hidden from players.
-- Calendar tab now uses a real monthly calendar; select a date to view event details below.
-- Coordinator events are collapsible.
-- Past coordinator events remain available with Edit, Delete, and Export options.
-- Existing Firebase Authentication, Firestore collections, users, events, signups, locations, and notifications are preserved.
+## Added
+- PowerDink logo in the main and login headers
+- Smooth soft-edge logo treatment
+- Responsive blue-gradient branded header
+- Notification bell wiggle when unread notifications exist
+- Subtle PowerDink logo glow
+
+## Preserved
+- Firebase Authentication and Firestore connection
+- Events, signups, users, locations, and notifications
+- Featured next event and expandable future events
