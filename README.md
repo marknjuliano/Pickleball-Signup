@@ -1,4 +1,7 @@
-# Pickleball Signup v2.5.2 — Verified Calendar Build
+# Pickleball Signup v2.5.3 — Runtime Fix
+
+Fixed the startup error caused by using the `today()` helper before it was initialized.
+
 
 Built from the last working Firebase-connected v2.4.2 files.
 
