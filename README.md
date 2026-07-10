@@ -1,15 +1,10 @@
-# Pickleball Signup v2.4
+# Pickleball Signup v2.4 Final
 
-Firebase-connected PowerDink branded release.
+Firebase-connected release with an integrated PowerDink header.
 
-## Added
-- PowerDink logo in the main and login headers
-- Smooth soft-edge logo treatment
-- Responsive blue-gradient branded header
-- Notification bell wiggle when unread notifications exist
-- Subtle PowerDink logo glow
-
-## Preserved
-- Firebase Authentication and Firestore connection
-- Events, signups, users, locations, and notifications
-- Featured next event and expandable future events
+## Changes
+- PowerDink logo now blends directly into the blue header
+- Removed logo glow and rectangular background edge
+- Functional notification bell retained
+- Mobile responsive header retained
+- Existing Firebase Authentication and Firestore connection preserved

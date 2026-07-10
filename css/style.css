@@ -57,7 +57,7 @@
 .eventDetailsCard{background:#fff;border:1px solid #e2ebf5;border-radius:24px;margin:14px 0;box-shadow:0 12px 28px rgba(20,30,55,.09);overflow:hidden}.eventDetailsCard>summary{list-style:none;display:grid;grid-template-columns:95px 1.5fr auto auto auto;gap:16px;align-items:center;padding:18px 20px;cursor:pointer}.eventDetailsCard>summary::-webkit-details-marker{display:none}.miniDate{display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto;gap:0 10px;align-items:center;border-right:1px solid #e5edf6;padding-right:16px}.miniDate span,.miniDate b{grid-column:1;color:#225bd0;font-weight:950;text-transform:uppercase;font-size:13px;line-height:1.05}.miniDate strong{grid-column:2;grid-row:1 / span 2;font-size:34px;line-height:1;color:#172033}.miniInfo b{display:block;font-size:17px}.miniInfo span{display:block;color:#526078;margin-top:3px}.miniStatus{white-space:nowrap}.miniCount{white-space:nowrap;color:#66738a;font-weight:800}.expandBtn{box-shadow:none;padding:11px 15px}.eventDetailsCard[open] .expandBtn::before{content:'Collapse';font-size:0}.eventDetailsCard[open] .expandBtn{font-size:0}.eventDetailsCard[open] .expandBtn::after{content:'Collapse';font-size:15px}.eventExpanded{padding:0 22px 22px}.eventExpanded h3:first-of-type{margin-top:8px}.comingDetails{background:rgba(255,255,255,.84)}
 @media(max-width:760px){.hero{padding:24px}.hero h1{font-size:32px}.featuredEvent{display:block}.featuredDate{flex-direction:row;gap:8px;justify-content:flex-start;padding:58px 20px 12px;border-right:0;border-bottom:1px solid rgba(23,32,51,.08)}.featuredDate strong{font-size:44px;letter-spacing:-2px}.featuredDate b{font-size:22px}.featuredMain{padding:22px 18px 22px}.featuredTop{display:block}.featuredBadges{text-align:left;margin-top:12px}.pickleArt{right:8px;bottom:-16px;width:82px;height:82px;opacity:.34}.pbPaddle{width:44px;height:54px;border-width:4px}.pbPaddle:after{left:15px;bottom:-31px;width:15px;height:34px}.pbBall{width:32px;height:32px}.eventDetailsCard>summary{grid-template-columns:78px 1fr;gap:12px}.miniStatus,.miniCount,.expandBtn{grid-column:2}.miniStatus{margin-top:4px}.miniCount{font-size:14px}.expandBtn{justify-self:start}.featuredEvent .actions,.eventExpanded .actions{justify-content:flex-start}}
 
-/* v2.4 PowerDink branded header */
+/* v2.4 Final — integrated PowerDink header */
 .brandHero{
   position:relative;
   overflow:visible;
@@ -77,25 +77,23 @@
   height:104px;
   object-fit:contain;
   object-position:center;
-  border-radius:24px;
-  mix-blend-mode:screen;
-  filter:drop-shadow(0 0 8px rgba(194,255,24,.22));
-  -webkit-mask-image:radial-gradient(ellipse 78% 78% at 50% 50%,#000 58%,rgba(0,0,0,.9) 72%,transparent 100%);
-  mask-image:radial-gradient(ellipse 78% 78% at 50% 50%,#000 58%,rgba(0,0,0,.9) 72%,transparent 100%);
-  animation:logoSoftGlow 5s ease-in-out infinite;
+  display:block;
+  flex:none;
+  filter:none;
+  mix-blend-mode:normal;
+  animation:none;
 }
 .brandDivider{width:2px;height:84px;background:linear-gradient(180deg,transparent,rgba(255,255,255,.38),transparent);flex:none}
 .brandTitle{min-width:0}.brandTitle h1{margin:0;color:#fff;font-size:clamp(30px,4vw,54px);line-height:1.05;letter-spacing:-1.4px;white-space:nowrap}.brandTitle p{margin:9px 0 0;color:#dbe7ff}
 .brandHero .notifBtn{flex:none;width:82px;height:82px;border-radius:24px;font-size:31px;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.3);backdrop-filter:blur(8px)}
 .brandHero .notifBtn.hasUnread{animation:bellWiggle 2.8s ease-in-out infinite,notifPulse 1.8s ease-in-out infinite}
 .loginBrandHero{justify-content:flex-start}.loginBrandHero .powerDinkLogo{width:210px;height:92px}.loginBrandHero .brandTitle h1{font-size:clamp(29px,4vw,44px)}
-@keyframes logoSoftGlow{0%,100%{filter:drop-shadow(0 0 6px rgba(194,255,24,.15))}50%{filter:drop-shadow(0 0 15px rgba(194,255,24,.42))}}
 @keyframes bellWiggle{0%,82%,100%{transform:rotate(0)}86%{transform:rotate(-9deg)}90%{transform:rotate(8deg)}94%{transform:rotate(-5deg)}97%{transform:rotate(3deg)}}
 @media(max-width:760px){
   .brandHero{min-height:112px;padding:16px 17px;gap:10px;border-radius:24px}
-  .brandLeft{gap:10px}.powerDinkLogo{width:116px;max-width:30vw;height:72px;border-radius:16px}.brandDivider{height:58px}
+  .brandLeft{gap:12px}.powerDinkLogo{width:122px;max-width:31vw;height:76px}.brandDivider{height:58px}
   .brandTitle h1{font-size:clamp(22px,6vw,32px);white-space:normal;letter-spacing:-.6px}.brandTitle p{font-size:13px;margin-top:5px}
   .brandHero .notifBtn{width:58px;height:58px;border-radius:18px;font-size:23px;padding:0}
-  .loginBrandHero .powerDinkLogo{width:120px;height:72px}.loginBrandHero{padding:18px 14px}.loginBrandHero .brandTitle h1{font-size:26px}
+  .loginBrandHero .powerDinkLogo{width:124px;height:74px}.loginBrandHero{padding:18px 14px}.loginBrandHero .brandTitle h1{font-size:26px}
 }
-@media(max-width:430px){.brandDivider{display:none}.brandLeft{gap:6px}.powerDinkLogo{width:105px;max-width:34vw}.brandTitle h1{font-size:22px}.brandHero .notifBtn{width:52px;height:52px}}
+@media(max-width:430px){.brandDivider{display:none}.brandLeft{gap:8px}.powerDinkLogo{width:112px;max-width:35vw}.brandTitle h1{font-size:22px}.brandHero .notifBtn{width:52px;height:52px}}
