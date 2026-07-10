@@ -1,4 +1,4 @@
-console.log('Pickleball Signup v2.5.3 runtime fix loaded');
+console.log('Pickleball Signup v2.5.4 all upcoming events loaded');
 import { auth, db } from './firebase.js';
 import {
   createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut,
@@ -163,7 +163,7 @@ function statusNotificationData(ev,data,isNew){
 }
 function renderApp(){
  const role=isCoordinator()?'Coordinator':'Player';
- appEl.innerHTML=`<div class="wrap"><div class="hero heroWithBell brandHero"><div class="brandLeft"><img src="images/powerdink-logo-professional.png" class="powerDinkLogo" alt="PowerDink logo"><span class="brandDivider"></span><div class="brandTitle"><h1>Pickleball Signup</h1></div></div>${renderNotificationButton()}</div><div class="tabs"><button class="tab ${state.view==='player'?'active':''}" onclick="nav('player')">Player</button><button class="tab ${state.view==='calendar'?'active':''}" onclick="nav('calendar')">Calendar</button><button class="tab ${state.view==='profile'?'active':''}" onclick="nav('profile')">Profile</button>${isCoordinator()?`<button class="tab ${state.view==='coordinator'?'active':''}" onclick="nav('coordinator')">Coordinator</button>`:''}<button class="tab" onclick="logout()">Logout</button></div><main id="main"></main><div class="footer">Firebase connected • Shared live data • v2.5.3</div></div>`;
+ appEl.innerHTML=`<div class="wrap"><div class="hero heroWithBell brandHero"><div class="brandLeft"><img src="images/powerdink-logo-professional.png" class="powerDinkLogo" alt="PowerDink logo"><span class="brandDivider"></span><div class="brandTitle"><h1>Pickleball Signup</h1></div></div>${renderNotificationButton()}</div><div class="tabs"><button class="tab ${state.view==='player'?'active':''}" onclick="nav('player')">Player</button><button class="tab ${state.view==='calendar'?'active':''}" onclick="nav('calendar')">Calendar</button><button class="tab ${state.view==='profile'?'active':''}" onclick="nav('profile')">Profile</button>${isCoordinator()?`<button class="tab ${state.view==='coordinator'?'active':''}" onclick="nav('coordinator')">Coordinator</button>`:''}<button class="tab" onclick="logout()">Logout</button></div><main id="main"></main><div class="footer">Firebase connected • Shared live data • v2.5.4</div></div>`;
  if(state.view==='calendar') renderCalendar(); else if(state.view==='profile') renderProfile(); else if(state.view==='coordinator' && isCoordinator()) renderCoordinator(); else renderPlayer();
 }
 function playerEventInner(ev, opts={}){
@@ -203,10 +203,10 @@ function collapsedEventCard(ev){
 function renderPlayer(){
  const events=[...state.events].sort((a,b)=>(a.date+a.start).localeCompare(b.date+b.start));
  const upcoming=events.filter(e=>e.date && new Date(e.date+'T23:59:59').getTime()>=Date.now());
- const visible=upcoming.slice(0,2);
- if(!visible.length){ $('#main').innerHTML=`<div class="card"><h2>No upcoming play dates</h2><p class="small">Past events are hidden from players. Waiting for the coordinator to add the next event.</p></div>`; return; }
- const [current,next]=visible;
- $('#main').innerHTML=`<div class="sectionTitle"><h2>Upcoming Events</h2><p class="small">Only the current and next event are shown here.</p></div>${featuredEventCard(current)}${next?`<h2 class="otherTitle">Next Event</h2>${collapsedEventCard(next)}`:''}`;
+ if(!upcoming.length){ $('#main').innerHTML=`<div class="card"><h2>No upcoming play dates</h2><p class="small">Past events are hidden from players. Waiting for the coordinator to add the next event.</p></div>`; return; }
+ const current=upcoming[0];
+ const future=upcoming.slice(1);
+ $('#main').innerHTML=`<div class="sectionTitle"><h2>Upcoming Events</h2><p class="small">The nearest event is featured. All later events are listed below.</p></div>${featuredEventCard(current)}${future.length?`<h2 class="otherTitle">All Next Events</h2>${future.map(collapsedEventCard).join('')}`:''}`;
 }
 function feeHtml(ev){ let v=ev.payment||''; const venmoMatch=String(v).match(/@([A-Za-z0-9_.-]+)/); const venmo=venmoMatch?venmoMatch[1]:''; return `<div class="feeBox"><b>💵 Court Fee:</b> $${esc(ev.fee||'')}<br><b>Payment:</b> ${esc(v)}<div style="margin-top:10px">${venmo?`<button class="secondary" onclick="window.open('https://venmo.com/${venmo}','_blank')">Pay with Venmo</button>`:''}<button class="secondary" onclick="markPaid('${ev.id}')">I Paid</button></div></div>`; }
 window.upsertSignup=async(eid,name,status)=>{const ev=state.events.find(e=>e.id===eid); if(!ev)return; let signups=[...(ev.signups||[])]; let s=signups.find(x=>(x.owner===state.user.uid||x.email===state.user.email)&&x.name===name); if(!canSignup(ev)&&!s)return alert('This play date is closed, cancelled, or fully booked.'); if(s){s.status=status;s.updatedAt=new Date().toISOString();} else signups.push({id:crypto.randomUUID(),owner:state.user.uid,email:state.user.email,name,status,checked:false,paid:false,createdAt:new Date().toISOString()}); await updateDoc(doc(db,'events',eid),{signups});};
