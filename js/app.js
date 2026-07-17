@@ -1,4 +1,4 @@
-console.log('Pickleball Signup v2.5.4 all upcoming events loaded');
+console.log('Pickleball Signup v2.6 username login loaded');
 import { auth, db } from './firebase.js';
 import {
   createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut,
@@ -13,6 +13,11 @@ const $ = sel => document.querySelector(sel);
 const appEl = $('#app');
 const DEFAULT_LOCATIONS = ['DinkHouse','Liberty Park','Cerritos Courts'];
 const today = () => new Date().toISOString().slice(0,10);
+const USERNAME_DOMAIN = 'users.powerdink.app';
+function normalizeUsername(value=''){ return String(value).trim().toLowerCase().replace(/[^a-z0-9._-]/g,''); }
+function usernameToEmail(username=''){ return `${normalizeUsername(username)}@${USERNAME_DOMAIN}`; }
+function loginIdentifierToEmail(value=''){ const v=String(value).trim(); return v.includes('@') ? v.toLowerCase() : usernameToEmail(v); }
+function isUsernameAccount(email=''){ return String(email).toLowerCase().endsWith(`@${USERNAME_DOMAIN}`); }
 let state = { user:null, profile:null, events:[], locations:[], notifications:[], showNotifications:false, view:localStorage.getItem('pickleballView')||'player', ready:false, calendarMonth:today().slice(0,7), selectedCalendarDate:today() };
 let unsubscribers = [];
 
@@ -71,8 +76,11 @@ onAuthStateChanged(auth, async user => {
 async function ensureProfile(user){
   const ref=doc(db,'users',user.uid); let snap=await getDoc(ref);
   if(!snap.exists()){
-    const fallbackName = user.displayName || user.email.split('@')[0];
-    await setDoc(ref,{email:user.email,name:fallbackName,role:'player',children:[],createdAt:serverTimestamp()},{merge:true});
+    const pendingUsername = sessionStorage.getItem('pendingPowerDinkUsername') || '';
+    const username = pendingUsername || (isUsernameAccount(user.email) ? user.email.split('@')[0] : '');
+    const fallbackName = user.displayName || username || user.email.split('@')[0];
+    await setDoc(ref,{email:user.email,name:fallbackName,username,usernameLower:normalizeUsername(username),role:'player',children:[],createdAt:serverTimestamp()},{merge:true});
+    sessionStorage.removeItem('pendingPowerDinkUsername');
     snap=await getDoc(ref);
   }
   state.profile={id:user.uid,...snap.data(),children:normalizeChildren(snap.data().children)};
@@ -88,12 +96,13 @@ function startListeners(){
 function renderError(err){ appEl.innerHTML=`<div class="wrap"><div class="card"><h2>Firebase Error</h2><div class="error">${esc(err.message)}</div><p class="small">Check Firebase config and Firestore rules.</p></div></div>`; }
 function render(){ if(!state.user) return renderLogin(); if(!state.ready) return appEl.innerHTML='<div class="wrap"><div class="card"><h2>Loading...</h2></div></div>'; renderApp(); }
 function renderLogin(){
-  appEl.innerHTML=`<div class="wrap login"><div><div class="hero brandHero loginBrandHero"><div class="brandLeft"><img src="images/powerdink-logo-professional.png" class="powerDinkLogo" alt="PowerDink logo"><span class="brandDivider"></span><div class="brandTitle"><h1>Pickleball Signup</h1><p>Login or create your player account.</p></div></div></div><div class="card"><h2>Login</h2><label>Email</label><input id="email" type="email" autocomplete="email"><label>Password</label><div class="passwordBox"><input id="pass" type="password" autocomplete="current-password"><button class="secondary" onclick="togglePass('pass',this)">Show</button></div><div class="row" style="margin-top:14px"><button onclick="login()">Login</button><button class="secondary" onclick="createAccount()">Create Account</button><button class="ghost" onclick="forgotPassword()">Forgot Password</button></div><p class="small">First time? Enter email/password, then Create Account. You can edit your name after login.</p></div></div></div>`;
+  appEl.innerHTML=`<div class="wrap login"><div><div class="hero brandHero loginBrandHero"><div class="brandLeft"><img src="images/powerdink-logo-professional.png" class="powerDinkLogo" alt="PowerDink logo"><span class="brandDivider"></span><div class="brandTitle"><h1>Pickleball Signup</h1><p>Log in with your username or email.</p></div></div></div><div class="card"><h2>Login</h2><label>Username or Email</label><input id="loginId" type="text" autocomplete="username" placeholder="Username or email"><label>Password</label><div class="passwordBox"><input id="pass" type="password" autocomplete="current-password"><button class="secondary" onclick="togglePass('pass',this)">Show</button></div><div class="row" style="margin-top:14px"><button onclick="login()">Login</button><button class="secondary" onclick="createAccount()">Create Account</button><button class="ghost" onclick="forgotPassword()">Forgot Password</button></div><p class="small"><b>New account:</b> enter a username without spaces and a password of at least 6 characters, then tap Create Account. Existing email accounts can continue using their email.</p></div></div></div>`;
 }
+
 window.togglePass=(id,btn)=>{const el=document.getElementById(id); el.type=el.type==='password'?'text':'password'; btn.textContent=el.type==='password'?'Show':'Hide';};
-window.login=async()=>{try{await signInWithEmailAndPassword(auth,$('#email').value.trim(),$('#pass').value);}catch(e){alert(friendlyFirebaseError(e));}};
-window.createAccount=async()=>{try{const email=$('#email').value.trim(); const pass=$('#pass').value; if(!email||!pass)return alert('Enter email and password.'); await createUserWithEmailAndPassword(auth,email,pass);}catch(e){alert(friendlyFirebaseError(e));}};
-window.forgotPassword=async()=>{const email=$('#email')?.value.trim()||prompt('Enter your email'); if(!email)return; try{await sendPasswordResetEmail(auth,email); alert('Password reset email sent. Please check your inbox or spam folder.');}catch(e){alert(friendlyFirebaseError(e));}};
+window.login=async()=>{try{const id=$('#loginId').value.trim(); if(!id)return alert('Enter your username or email.'); await signInWithEmailAndPassword(auth,loginIdentifierToEmail(id),$('#pass').value);}catch(e){alert(friendlyFirebaseError(e));}};
+window.createAccount=async()=>{try{const id=$('#loginId').value.trim(); const pass=$('#pass').value; if(!id||!pass)return alert('Enter a username or email and password.'); if(!id.includes('@')){const username=normalizeUsername(id); if(username.length<3)return alert('Username must be at least 3 characters. Use letters, numbers, dot, dash, or underscore only.'); sessionStorage.setItem('pendingPowerDinkUsername',username);} await createUserWithEmailAndPassword(auth,loginIdentifierToEmail(id),pass);}catch(e){sessionStorage.removeItem('pendingPowerDinkUsername'); alert(friendlyFirebaseError(e));}};
+window.forgotPassword=async()=>{const id=$('#loginId')?.value.trim()||prompt('Enter your email'); if(!id)return; if(!id.includes('@'))return alert('Password reset by email is available only for email-based accounts. Please contact the coordinator for username-account assistance.'); try{await sendPasswordResetEmail(auth,id.toLowerCase()); alert('Password reset email sent. Please check your inbox or spam folder.');}catch(e){alert(friendlyFirebaseError(e));}};
 window.logout=async()=>{await signOut(auth);};
 
 function isCoordinator(){ return state.profile?.role === 'coordinator' || state.profile?.role === 'admin'; }
@@ -163,7 +172,7 @@ function statusNotificationData(ev,data,isNew){
 }
 function renderApp(){
  const role=isCoordinator()?'Coordinator':'Player';
- appEl.innerHTML=`<div class="wrap"><div class="hero heroWithBell brandHero"><div class="brandLeft"><img src="images/powerdink-logo-professional.png" class="powerDinkLogo" alt="PowerDink logo"><span class="brandDivider"></span><div class="brandTitle"><h1>Pickleball Signup</h1></div></div>${renderNotificationButton()}</div><div class="tabs"><button class="tab ${state.view==='player'?'active':''}" onclick="nav('player')">Player</button><button class="tab ${state.view==='calendar'?'active':''}" onclick="nav('calendar')">Calendar</button><button class="tab ${state.view==='profile'?'active':''}" onclick="nav('profile')">Profile</button>${isCoordinator()?`<button class="tab ${state.view==='coordinator'?'active':''}" onclick="nav('coordinator')">Coordinator</button>`:''}<button class="tab" onclick="logout()">Logout</button></div><main id="main"></main><div class="footer">Firebase connected • Shared live data • v2.5.4</div></div>`;
+ appEl.innerHTML=`<div class="wrap"><div class="hero heroWithBell brandHero"><div class="brandLeft"><img src="images/powerdink-logo-professional.png" class="powerDinkLogo" alt="PowerDink logo"><span class="brandDivider"></span><div class="brandTitle"><h1>Pickleball Signup</h1></div></div>${renderNotificationButton()}</div><div class="tabs"><button class="tab ${state.view==='player'?'active':''}" onclick="nav('player')">Player</button><button class="tab ${state.view==='calendar'?'active':''}" onclick="nav('calendar')">Calendar</button><button class="tab ${state.view==='profile'?'active':''}" onclick="nav('profile')">Profile</button>${isCoordinator()?`<button class="tab ${state.view==='coordinator'?'active':''}" onclick="nav('coordinator')">Coordinator</button>`:''}<button class="tab" onclick="logout()">Logout</button></div><main id="main"></main><div class="footer">Firebase connected • Shared live data • v2.6</div></div>`;
  if(state.view==='calendar') renderCalendar(); else if(state.view==='profile') renderProfile(); else if(state.view==='coordinator' && isCoordinator()) renderCoordinator(); else renderPlayer();
 }
 function playerEventInner(ev, opts={}){
@@ -244,7 +253,7 @@ window.changeCalendarMonth=(delta)=>{
  state.selectedCalendarDate=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;
  renderCalendar();
 };
-function renderProfile(){ const p=state.profile; $('#main').innerHTML=`<div class="card"><h2>Edit Profile</h2><label>Name</label><input id="profileName" value="${esc(p.name||'')}"><label>Email</label><input value="${esc(state.user.email)}" disabled><label>Phone optional</label><input id="profilePhone" value="${esc(p.phone||'')}"><label>DUPR / Skill Level optional</label><input id="profileDupr" value="${esc(p.dupr||'')}"><button style="margin-top:12px" onclick="saveProfile()">Save Profile</button></div><div class="card"><h2>Change Password</h2><div class="passwordBox"><input id="newPassword" type="password" placeholder="New password"><button class="secondary" onclick="togglePass('newPassword',this)">Show</button></div><button style="margin-top:10px" onclick="changeMyPassword()">Change Password</button></div><div class="card"><h2>Family Members</h2>${normalizeChildren(p.children).map((n,i)=>`<div class="person"><b>${esc(n)}</b><span><button class="secondary" onclick="editChild(${i})">Edit</button> <button class="danger" onclick="deleteChild(${i})">Delete</button></span></div>`).join('')||'<p class="small">No children added yet.</p>'}<div class="row"><input id="childName" placeholder="Child name"><button onclick="addChild()">Add Child</button></div></div>`; }
+function renderProfile(){ const p=state.profile; const username=p.username||''; const accountLabel=isUsernameAccount(state.user.email)?username:state.user.email; $('#main').innerHTML=`<div class="card"><h2>Edit Profile</h2><label>Name</label><input id="profileName" value="${esc(p.name||'')}"><label>${username?'Username':'Email'}</label><input value="${esc(accountLabel)}" disabled><label>Phone optional</label><input id="profilePhone" value="${esc(p.phone||'')}"><label>DUPR / Skill Level optional</label><input id="profileDupr" value="${esc(p.dupr||'')}"><button style="margin-top:12px" onclick="saveProfile()">Save Profile</button></div><div class="card"><h2>Change Password</h2><div class="passwordBox"><input id="newPassword" type="password" placeholder="New password"><button class="secondary" onclick="togglePass('newPassword',this)">Show</button></div><button style="margin-top:10px" onclick="changeMyPassword()">Change Password</button></div><div class="card"><h2>Family Members</h2>${normalizeChildren(p.children).map((n,i)=>`<div class="person"><b>${esc(n)}</b><span><button class="secondary" onclick="editChild(${i})">Edit</button> <button class="danger" onclick="deleteChild(${i})">Delete</button></span></div>`).join('')||'<p class="small">No children added yet.</p>'}<div class="row"><input id="childName" placeholder="Child name"><button onclick="addChild()">Add Child</button></div></div>`; }
 window.saveProfile=async()=>{await updateDoc(doc(db,'users',state.user.uid),{name:$('#profileName').value.trim(),phone:$('#profilePhone').value.trim(),dupr:$('#profileDupr').value.trim()}); alert('Profile saved.');};
 window.changeMyPassword=async()=>{const p=$('#newPassword').value; if(p.length<6)return alert('Use at least 6 characters.'); try{await updatePassword(state.user,p); alert('Password changed.');}catch(e){alert(friendlyFirebaseError(e)+' You may need to log out and log in again first.');}};
 window.addChild=async()=>{const n=$('#childName').value.trim(); if(!n)return; const children=[...normalizeChildren(state.profile.children),n]; await updateDoc(doc(db,'users',state.user.uid),{children});};

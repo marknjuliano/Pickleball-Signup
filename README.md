@@ -1,12 +1,17 @@
-# Pickleball Signup v2.5.4 — All Upcoming Events
+# Pickleball Signup v2.6 — Username Login
 
-Built from the working v2.5.3 Firebase-connected version.
+Built from the working Firebase-connected v2.5.4 release.
 
-## Change
-- Player tab keeps the nearest upcoming event as the featured card.
-- All remaining future events are shown below as collapsed cards.
-- Past events remain hidden from players.
-- Calendar, coordinator tools, notifications, Authentication, and Firestore configuration are unchanged.
+## New
+- Login accepts either username or email.
+- New users may create an account using a username and password.
+- Existing email/password users continue to work normally.
+- Username accounts use Firebase Authentication through an internal account address.
+- All v2.5.4 Player, Calendar, Coordinator, notifications, and Firestore features are preserved.
+
+## Important
+- Email password reset works for email-based accounts.
+- Username-based accounts should contact the coordinator if they forget their password.
 
 ## Upload
-Upload the CONTENTS of this folder to the repository root. Replace `index.html`, `css`, `js`, `images`, and `README.md`.
+Upload the contents of this folder to the root of the existing GitHub repository. Replace index.html, css, js, images, and README.md.
