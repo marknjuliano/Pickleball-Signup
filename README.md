@@ -1,15 +1,13 @@
-# Pickleball Signup v2.6.2 — Notification Overlay & UI Polish
+# Pickleball Signup v2.6.3 — Responsive Header Polish
 
-Built from the working v2.6.1 Firebase-connected version.
+Built from the working v2.6.2 Firebase-connected version.
 
-## Fixes
-- Notification Center now opens as a true page-level overlay and cannot be covered by event cards.
-- Tap outside the notification panel to close it.
-- Neutral create-account placeholders (`your.username`, `Your Name`).
-- Removed the decorative paddle/ball from the featured event.
-- Compact Players/Who’s Coming section.
-- Friendlier signup prompt.
-- Existing username/email login, password recovery, Firebase Authentication, Firestore data, Calendar, and Coordinator tools are preserved.
+## Changes
+- Fixed the login header so “Pickleball Signup” no longer breaks into multiple lines on desktop.
+- Balanced the PowerDink logo, divider, title, and notification bell.
+- Improved responsive sizing on tablets and phones.
+- Preserved username/email login, recovery email, notification overlay, all upcoming events, calendar, and coordinator tools.
+- Firebase Authentication and Firestore configuration remain unchanged.
 
 ## Upload
-Upload the contents of this folder to the repository root and replace the existing `index.html`, `css`, `js`, `images`, and `README.md`.
+Upload the contents of this folder to the root of the existing GitHub repository and replace the matching files.

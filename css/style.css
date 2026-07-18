@@ -336,3 +336,70 @@
   .notifScroll{max-height:calc(100vh - 190px)}
   .notifActions{gap:4px}.notifActions button{padding:9px 10px;font-size:13px}
 }
+
+/* v2.6.3 — unified responsive PowerDink header */
+.login>div{width:min(960px,100%)}
+.brandHero{
+  min-height:136px;
+  padding:18px 24px;
+  border-radius:30px;
+  overflow:hidden!important;
+  display:flex;
+  align-items:center;
+  gap:18px;
+}
+.brandLeft{
+  flex:1 1 auto;
+  min-width:0;
+  display:grid;
+  grid-template-columns:220px 1px minmax(0,1fr);
+  align-items:center;
+  gap:22px;
+}
+.powerDinkLogo{
+  width:220px;
+  max-width:100%;
+  height:98px;
+  object-fit:contain;
+  object-position:center;
+  filter:drop-shadow(0 7px 12px rgba(0,0,0,.45));
+}
+.brandDivider{height:76px;width:1px;background:linear-gradient(180deg,transparent,rgba(183,240,0,.62),transparent)}
+.brandTitle{min-width:0}
+.brandTitle h1{
+  font-size:clamp(34px,5.1vw,55px);
+  line-height:1;
+  letter-spacing:-1.5px;
+  white-space:nowrap;
+  overflow:visible;
+  overflow-wrap:normal;
+  text-wrap:nowrap;
+}
+.brandTitle p{max-width:430px;font-size:16px;line-height:1.35;margin-top:9px;color:#e4ebff}
+.brandHero .notifWrap{flex:0 0 auto}
+.brandHero .notifBtn{width:70px;height:70px;min-width:70px;border-radius:22px;padding:0}
+.loginBrandHero{justify-content:center}
+.loginBrandHero .brandLeft{grid-template-columns:220px 1px minmax(0,1fr)}
+.loginBrandHero .powerDinkLogo{width:220px;height:98px}
+.loginBrandHero .brandTitle h1{font-size:clamp(34px,5.1vw,55px);white-space:nowrap}
+.authCard{margin-top:22px}
+
+@media(max-width:760px){
+  .brandHero{min-height:106px;padding:12px 13px;border-radius:24px;gap:8px}
+  .brandLeft,.loginBrandHero .brandLeft{grid-template-columns:105px 1px minmax(0,1fr);gap:9px}
+  .powerDinkLogo,.loginBrandHero .powerDinkLogo{width:105px;height:76px}
+  .brandDivider{display:block;height:54px}
+  .brandTitle h1,.loginBrandHero .brandTitle h1{font-size:clamp(21px,5.7vw,30px);line-height:1.02;letter-spacing:-.6px;white-space:nowrap}
+  .brandTitle p{font-size:12px;line-height:1.25;margin-top:5px}
+  .brandHero .notifBtn{width:48px;height:48px;min-width:48px;border-radius:16px;font-size:21px}
+  .authCard{margin-top:14px}
+}
+@media(max-width:470px){
+  .brandHero{padding:10px 10px;min-height:94px}
+  .brandLeft,.loginBrandHero .brandLeft{grid-template-columns:82px minmax(0,1fr);gap:8px}
+  .powerDinkLogo,.loginBrandHero .powerDinkLogo{width:82px;height:64px}
+  .brandDivider{display:none}
+  .brandTitle h1,.loginBrandHero .brandTitle h1{font-size:clamp(19px,5.8vw,25px);letter-spacing:-.4px}
+  .brandTitle p{font-size:11px;margin-top:4px}
+  .brandHero .notifBtn{width:44px;height:44px;min-width:44px}
+}
