@@ -1,18 +1,15 @@
-# Pickleball Signup v2.6.1 — Username + Recovery Email
+# Pickleball Signup v2.6.2 — Notification Overlay & UI Polish
 
-Firebase-connected GitHub Pages app.
+Built from the working v2.6.1 Firebase-connected version.
 
-## Included
-- Separate Login and Create Account tabs.
-- New accounts use a required username and display name.
-- Optional recovery email supports Firebase password reset.
-- Existing email/password accounts continue to work.
-- Username login resolves through the Firestore `usernames` collection.
-- Notification panel no longer clips inside the header.
-- All v2.5.4 player, calendar, coordinator, and notification features remain.
-
-## Important Firestore access
-The app creates `usernames/{usernameLower}` mapping documents. Username login requires those mapping documents to be readable before login.
+## Fixes
+- Notification Center now opens as a true page-level overlay and cannot be covered by event cards.
+- Tap outside the notification panel to close it.
+- Neutral create-account placeholders (`your.username`, `Your Name`).
+- Removed the decorative paddle/ball from the featured event.
+- Compact Players/Who’s Coming section.
+- Friendlier signup prompt.
+- Existing username/email login, password recovery, Firebase Authentication, Firestore data, Calendar, and Coordinator tools are preserved.
 
 ## Upload
-Upload the CONTENTS of this folder to the repository root and replace `index.html`, `css`, `js`, `images`, and `README.md`.
+Upload the contents of this folder to the repository root and replace the existing `index.html`, `css`, `js`, `images`, and `README.md`.

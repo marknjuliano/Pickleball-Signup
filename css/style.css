@@ -281,3 +281,58 @@
 .authLink{display:block;margin:10px auto 0}
 .required{color:#b42318}.fieldHelp{margin:7px 3px 16px}.authCard h2{font-size:34px;margin-bottom:22px}
 @media(max-width:620px){.authTabs{margin-bottom:25px}.authCard h2{font-size:28px}.authTab{padding:13px 8px}.brandHero{overflow:visible!important}.notifPanel{top:calc(100% + 10px)!important}}
+
+
+/* v2.6.2 — true notification overlay + compact player polish */
+.brandHero{overflow:hidden!important}
+.notifWrap{z-index:20}
+.notifOverlay{
+  position:fixed;
+  inset:0;
+  z-index:100000;
+  background:rgba(9,16,28,.34);
+  backdrop-filter:blur(2px);
+  display:flex;
+  justify-content:flex-end;
+  align-items:flex-start;
+  padding:92px 24px 24px;
+}
+.notifPanel{
+  position:relative!important;
+  inset:auto!important;
+  top:auto!important;
+  right:auto!important;
+  left:auto!important;
+  width:min(430px,calc(100vw - 32px))!important;
+  max-height:calc(100vh - 116px)!important;
+  margin:0!important;
+  padding:16px!important;
+  overflow:hidden!important;
+  background:#fff!important;
+  border:1px solid #dce6f1!important;
+  border-radius:24px!important;
+  box-shadow:0 28px 80px rgba(8,18,38,.34)!important;
+  z-index:100001!important;
+}
+.notifPanel:before{display:none!important}
+.notifHeader{position:sticky;top:0;background:#fff;z-index:2;margin:0 0 10px;padding-bottom:12px;border-bottom:1px solid #e8eef5}
+.notifHeader h3{margin:0 0 2px}
+.notifScroll{overflow:auto;max-height:calc(100vh - 210px);padding-right:3px}
+.notifItem{padding:12px 12px 12px 15px;margin:8px 0;border-radius:16px;gap:10px}
+.notifItem p{margin:3px 0 5px;line-height:1.35}
+.notifIcon{font-size:21px}
+.notifTitleRow{display:flex;align-items:center;gap:8px}
+.unreadDot{width:9px;height:9px;border-radius:50%;background:#e53935;flex:none}
+.notifItem.unread .notifBody b:after{display:none}
+.emptyNotif{text-align:center;padding:24px 8px}
+.pickleArt{display:none!important}
+.comingDetails{margin-top:16px}
+.comingDetails summary{padding:14px 17px;font-size:1.05rem}
+.comingDetails summary::after{padding:8px 12px}
+.featuredMain{min-height:0}
+@media(max-width:620px){
+  .notifOverlay{padding:76px 10px 10px;align-items:flex-start}
+  .notifPanel{width:100%!important;max-height:calc(100vh - 88px)!important;border-radius:22px!important}
+  .notifScroll{max-height:calc(100vh - 190px)}
+  .notifActions{gap:4px}.notifActions button{padding:9px 10px;font-size:13px}
+}
