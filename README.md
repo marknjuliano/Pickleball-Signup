@@ -1,7 +1,12 @@
-# Pickleball Signup v2.7.1 — Exact PowerDink Header Refresh
+# Pickleball Signup v2.7.2 — Exact-Match PowerDink Header
 
-- Uses the original PowerDink logo.
+Built from the working Firebase-connected v2.7.1 version.
+
+## Changes
+- Larger original PowerDink logo.
 - Full-width black/neon textured header through the notification bell.
-- Clear centered Pickleball Signup title.
-- New asset filenames and cache-busting so GitHub Pages does not reuse the old header image.
-- Firebase Authentication, Firestore, username/email login, recovery email, notifications, calendar, events, and coordinator tools remain unchanged.
+- Darkened center overlay so “Pickleball Signup” stays clear.
+- Balanced desktop and mobile proportions.
+- Existing Firebase Authentication, Firestore data, username/email login, recovery email, notifications, calendar, events, and coordinator tools preserved.
+
+Upload the contents of this folder to the GitHub repository root.
