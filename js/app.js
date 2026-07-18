@@ -1,4 +1,4 @@
-console.log('Pickleball Signup v2.6 username login loaded');
+console.log('Pickleball Signup v2.6.1 username + recovery loaded');
 import { auth, db } from './firebase.js';
 import {
   createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut,
@@ -18,6 +18,23 @@ function normalizeUsername(value=''){ return String(value).trim().toLowerCase().
 function usernameToEmail(username=''){ return `${normalizeUsername(username)}@${USERNAME_DOMAIN}`; }
 function loginIdentifierToEmail(value=''){ const v=String(value).trim(); return v.includes('@') ? v.toLowerCase() : usernameToEmail(v); }
 function isUsernameAccount(email=''){ return String(email).toLowerCase().endsWith(`@${USERNAME_DOMAIN}`); }
+async function usernameRecord(username=''){
+  const key=normalizeUsername(username);
+  if(!key) return null;
+  try{
+    const snap=await getDoc(doc(db,'usernames',key));
+    return snap.exists()?snap.data():null;
+  }catch(error){
+    console.warn('Username lookup unavailable',error);
+    return null;
+  }
+}
+async function resolveLoginEmail(identifier=''){
+  const value=String(identifier).trim();
+  if(value.includes('@')) return value.toLowerCase();
+  const record=await usernameRecord(value);
+  return String(record?.authEmail||record?.email||usernameToEmail(value)).toLowerCase();
+}
 let state = { user:null, profile:null, events:[], locations:[], notifications:[], showNotifications:false, view:localStorage.getItem('pickleballView')||'player', ready:false, calendarMonth:today().slice(0,7), selectedCalendarDate:today() };
 let unsubscribers = [];
 
@@ -75,12 +92,18 @@ onAuthStateChanged(auth, async user => {
 
 async function ensureProfile(user){
   const ref=doc(db,'users',user.uid); let snap=await getDoc(ref);
+  const pendingRaw=sessionStorage.getItem('pendingPowerDinkAccount');
+  let pending={};
+  try{ pending=pendingRaw?JSON.parse(pendingRaw):{}; }catch(e){ pending={}; }
   if(!snap.exists()){
-    const pendingUsername = sessionStorage.getItem('pendingPowerDinkUsername') || '';
-    const username = pendingUsername || (isUsernameAccount(user.email) ? user.email.split('@')[0] : '');
-    const fallbackName = user.displayName || username || user.email.split('@')[0];
-    await setDoc(ref,{email:user.email,name:fallbackName,username,usernameLower:normalizeUsername(username),role:'player',children:[],createdAt:serverTimestamp()},{merge:true});
-    sessionStorage.removeItem('pendingPowerDinkUsername');
+    const username = pending.username || (isUsernameAccount(user.email) ? user.email.split('@')[0] : '');
+    const fallbackName = pending.displayName || user.displayName || username || user.email.split('@')[0];
+    const recoveryEmail = pending.recoveryEmail || (!isUsernameAccount(user.email)?user.email:'');
+    await setDoc(ref,{email:user.email,name:fallbackName,username,usernameLower:normalizeUsername(username),recoveryEmail,role:'player',children:[],createdAt:serverTimestamp()},{merge:true});
+    if(username){
+      await setDoc(doc(db,'usernames',normalizeUsername(username)),{uid:user.uid,username,authEmail:user.email,recoveryEmail,createdAt:serverTimestamp()},{merge:true});
+    }
+    sessionStorage.removeItem('pendingPowerDinkAccount');
     snap=await getDoc(ref);
   }
   state.profile={id:user.uid,...snap.data(),children:normalizeChildren(snap.data().children)};
@@ -96,13 +119,39 @@ function startListeners(){
 function renderError(err){ appEl.innerHTML=`<div class="wrap"><div class="card"><h2>Firebase Error</h2><div class="error">${esc(err.message)}</div><p class="small">Check Firebase config and Firestore rules.</p></div></div>`; }
 function render(){ if(!state.user) return renderLogin(); if(!state.ready) return appEl.innerHTML='<div class="wrap"><div class="card"><h2>Loading...</h2></div></div>'; renderApp(); }
 function renderLogin(){
-  appEl.innerHTML=`<div class="wrap login"><div><div class="hero brandHero loginBrandHero"><div class="brandLeft"><img src="images/powerdink-logo-professional.png" class="powerDinkLogo" alt="PowerDink logo"><span class="brandDivider"></span><div class="brandTitle"><h1>Pickleball Signup</h1><p>Log in with your username or email.</p></div></div></div><div class="card"><h2>Login</h2><label>Username or Email</label><input id="loginId" type="text" autocomplete="username" placeholder="Username or email"><label>Password</label><div class="passwordBox"><input id="pass" type="password" autocomplete="current-password"><button class="secondary" onclick="togglePass('pass',this)">Show</button></div><div class="row" style="margin-top:14px"><button onclick="login()">Login</button><button class="secondary" onclick="createAccount()">Create Account</button><button class="ghost" onclick="forgotPassword()">Forgot Password</button></div><p class="small"><b>New account:</b> enter a username without spaces and a password of at least 6 characters, then tap Create Account. Existing email accounts can continue using their email.</p></div></div></div>`;
+  appEl.innerHTML=`<div class="wrap login"><div><div class="hero brandHero loginBrandHero"><div class="brandLeft"><img src="images/powerdink-logo-professional.png" class="powerDinkLogo" alt="PowerDink logo"><span class="brandDivider"></span><div class="brandTitle"><h1>Pickleball Signup</h1><p>Use your username or existing email account.</p></div></div></div><div class="card authCard"><div class="authTabs"><button id="loginTabBtn" class="authTab active" onclick="showAuthTab('login')">Login</button><button id="createTabBtn" class="authTab" onclick="showAuthTab('create')">Create Account</button></div><section id="loginPane"><h2>Welcome Back</h2><label>Username or Email</label><input id="loginId" type="text" autocomplete="username" placeholder="Username or email"><label>Password</label><div class="passwordBox"><input id="pass" type="password" autocomplete="current-password"><button class="secondary" onclick="togglePass('pass',this)">Show</button></div><button class="authPrimary" onclick="login()">Login</button><button class="ghost authLink" onclick="forgotPassword()">Forgot Password?</button><p class="small">Existing email accounts can continue signing in with their email and password.</p></section><section id="createPane" class="hide"><h2>Create Your Account</h2><label>Username <span class="required">*</span></label><input id="newUsername" type="text" autocomplete="username" placeholder="mark.juliano"><p class="small fieldHelp">Use 3–24 characters: letters, numbers, dot, underscore, or hyphen.</p><label>Display Name <span class="required">*</span></label><input id="displayName" type="text" autocomplete="name" placeholder="Mark Juliano"><label>Recovery Email <span class="muted">(optional)</span></label><input id="recoveryEmail" type="email" autocomplete="email" placeholder="name@example.com"><p class="small fieldHelp">Add an email for self-service password reset. Without one, coordinator help is required.</p><label>Password <span class="required">*</span></label><div class="passwordBox"><input id="newPass" type="password" autocomplete="new-password"><button class="secondary" onclick="togglePass('newPass',this)">Show</button></div><button class="authPrimary" onclick="createAccount()">Create Account</button><p class="small">New accounts are active immediately after creation.</p></section></div></div></div>`;
 }
-
+window.showAuthTab=(tab)=>{
+  const login=tab==='login';
+  $('#loginPane')?.classList.toggle('hide',!login);
+  $('#createPane')?.classList.toggle('hide',login);
+  $('#loginTabBtn')?.classList.toggle('active',login);
+  $('#createTabBtn')?.classList.toggle('active',!login);
+};
 window.togglePass=(id,btn)=>{const el=document.getElementById(id); el.type=el.type==='password'?'text':'password'; btn.textContent=el.type==='password'?'Show':'Hide';};
-window.login=async()=>{try{const id=$('#loginId').value.trim(); if(!id)return alert('Enter your username or email.'); await signInWithEmailAndPassword(auth,loginIdentifierToEmail(id),$('#pass').value);}catch(e){alert(friendlyFirebaseError(e));}};
-window.createAccount=async()=>{try{const id=$('#loginId').value.trim(); const pass=$('#pass').value; if(!id||!pass)return alert('Enter a username or email and password.'); if(!id.includes('@')){const username=normalizeUsername(id); if(username.length<3)return alert('Username must be at least 3 characters. Use letters, numbers, dot, dash, or underscore only.'); sessionStorage.setItem('pendingPowerDinkUsername',username);} await createUserWithEmailAndPassword(auth,loginIdentifierToEmail(id),pass);}catch(e){sessionStorage.removeItem('pendingPowerDinkUsername'); alert(friendlyFirebaseError(e));}};
-window.forgotPassword=async()=>{const id=$('#loginId')?.value.trim()||prompt('Enter your email'); if(!id)return; if(!id.includes('@'))return alert('Password reset by email is available only for email-based accounts. Please contact the coordinator for username-account assistance.'); try{await sendPasswordResetEmail(auth,id.toLowerCase()); alert('Password reset email sent. Please check your inbox or spam folder.');}catch(e){alert(friendlyFirebaseError(e));}};
+window.login=async()=>{try{const id=$('#loginId').value.trim(); if(!id)return alert('Enter your username or email.'); const email=await resolveLoginEmail(id); await signInWithEmailAndPassword(auth,email,$('#pass').value);}catch(e){alert(friendlyFirebaseError(e));}};
+window.createAccount=async()=>{try{
+  const raw=$('#newUsername').value.trim(); const username=normalizeUsername(raw); const displayName=$('#displayName').value.trim(); const recoveryEmail=$('#recoveryEmail').value.trim().toLowerCase(); const pass=$('#newPass').value;
+  if(!/^[a-z0-9._-]{3,24}$/.test(raw.toLowerCase()) || username!==raw.toLowerCase()) return alert('Username must be 3–24 characters using only letters, numbers, dot, underscore, or hyphen.');
+  if(!displayName) return alert('Enter your display name.');
+  if(pass.length<6) return alert('Password must be at least 6 characters.');
+  if(recoveryEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recoveryEmail)) return alert('Enter a valid recovery email.');
+  const existing=await usernameRecord(username);
+  if(existing) return alert('That username is already taken. Please choose another.');
+  const authEmail=recoveryEmail || usernameToEmail(username);
+  sessionStorage.setItem('pendingPowerDinkAccount',JSON.stringify({username,displayName,recoveryEmail}));
+  await createUserWithEmailAndPassword(auth,authEmail,pass);
+}catch(e){sessionStorage.removeItem('pendingPowerDinkAccount'); alert(friendlyFirebaseError(e));}};
+window.forgotPassword=async()=>{
+  const id=$('#loginId')?.value.trim()||prompt('Enter your username or email'); if(!id)return;
+  try{
+    const record=id.includes('@')?null:await usernameRecord(id);
+    const email=id.includes('@')?id.toLowerCase():String(record?.recoveryEmail||record?.authEmail||'').toLowerCase();
+    if(!email || isUsernameAccount(email)) return alert('No recovery email is connected to this username. Please contact the coordinator for password assistance.');
+    await sendPasswordResetEmail(auth,email);
+    alert('Password reset email sent. Please check your inbox or spam folder.');
+  }catch(e){alert(friendlyFirebaseError(e));}
+};
 window.logout=async()=>{await signOut(auth);};
 
 function isCoordinator(){ return state.profile?.role === 'coordinator' || state.profile?.role === 'admin'; }
@@ -172,7 +221,7 @@ function statusNotificationData(ev,data,isNew){
 }
 function renderApp(){
  const role=isCoordinator()?'Coordinator':'Player';
- appEl.innerHTML=`<div class="wrap"><div class="hero heroWithBell brandHero"><div class="brandLeft"><img src="images/powerdink-logo-professional.png" class="powerDinkLogo" alt="PowerDink logo"><span class="brandDivider"></span><div class="brandTitle"><h1>Pickleball Signup</h1></div></div>${renderNotificationButton()}</div><div class="tabs"><button class="tab ${state.view==='player'?'active':''}" onclick="nav('player')">Player</button><button class="tab ${state.view==='calendar'?'active':''}" onclick="nav('calendar')">Calendar</button><button class="tab ${state.view==='profile'?'active':''}" onclick="nav('profile')">Profile</button>${isCoordinator()?`<button class="tab ${state.view==='coordinator'?'active':''}" onclick="nav('coordinator')">Coordinator</button>`:''}<button class="tab" onclick="logout()">Logout</button></div><main id="main"></main><div class="footer">Firebase connected • Shared live data • v2.6</div></div>`;
+ appEl.innerHTML=`<div class="wrap"><div class="hero heroWithBell brandHero"><div class="brandLeft"><img src="images/powerdink-logo-professional.png" class="powerDinkLogo" alt="PowerDink logo"><span class="brandDivider"></span><div class="brandTitle"><h1>Pickleball Signup</h1></div></div>${renderNotificationButton()}</div><div class="tabs"><button class="tab ${state.view==='player'?'active':''}" onclick="nav('player')">Player</button><button class="tab ${state.view==='calendar'?'active':''}" onclick="nav('calendar')">Calendar</button><button class="tab ${state.view==='profile'?'active':''}" onclick="nav('profile')">Profile</button>${isCoordinator()?`<button class="tab ${state.view==='coordinator'?'active':''}" onclick="nav('coordinator')">Coordinator</button>`:''}<button class="tab" onclick="logout()">Logout</button></div><main id="main"></main><div class="footer">Firebase connected • Shared live data • v2.6.1</div></div>`;
  if(state.view==='calendar') renderCalendar(); else if(state.view==='profile') renderProfile(); else if(state.view==='coordinator' && isCoordinator()) renderCoordinator(); else renderPlayer();
 }
 function playerEventInner(ev, opts={}){
