@@ -212,7 +212,7 @@
   background-color:#050706;
   background-image:
     linear-gradient(90deg,rgba(0,0,0,.05),rgba(0,0,0,.24)),
-    url('../images/powerdink-header-texture.jpg');
+    url('../images/powerdink-header-v271.jpg?v=2.7.1');
   background-size:cover;
   background-position:center;
   border:1px solid rgba(183,240,0,.22);
@@ -419,7 +419,7 @@
   background-color:#050706;
   background-image:
     linear-gradient(90deg,rgba(0,0,0,.02) 0%,rgba(0,0,0,.18) 30%,rgba(0,0,0,.40) 100%),
-    url('../images/powerdink-header-texture.jpg');
+    url('../images/powerdink-header-v271.jpg?v=2.7.1');
   background-size:cover;
   background-position:center;
   border:1px solid rgba(183,240,0,.42);
@@ -536,4 +536,51 @@
     letter-spacing:-.4px;
   }
   .brandHero .notifBtn{width:43px;height:43px;min-width:43px;border-radius:15px;font-size:19px}
+}
+
+
+/* v2.7.1 — exact PowerDink header refresh */
+.brandHero{
+  min-height:150px;
+  padding:18px 26px;
+  border-radius:30px;
+  background-image:
+    linear-gradient(90deg,rgba(0,0,0,.02) 0%,rgba(0,0,0,.14) 34%,rgba(0,0,0,.34) 100%),
+    url('../images/powerdink-header-v271.jpg?v=2.7.1');
+  background-size:cover;
+  background-position:center;
+}
+.brandLeft{
+  grid-template-columns:235px 2px minmax(0,1fr);
+  gap:26px;
+}
+.powerDinkLogo,.loginBrandHero .powerDinkLogo{
+  width:235px;
+  height:112px;
+  object-fit:contain;
+  filter:drop-shadow(0 7px 12px rgba(0,0,0,.48));
+}
+.brandTitle{text-align:center}
+.brandTitle h1,.loginBrandHero .brandTitle h1{
+  font-size:clamp(38px,5vw,60px);
+  letter-spacing:-1.8px;
+  text-shadow:0 4px 16px rgba(0,0,0,.76);
+}
+.brandHero .notifBtn{
+  width:76px;height:76px;min-width:76px;
+  border-radius:22px;
+}
+@media(max-width:760px){
+  .brandHero{min-height:104px;padding:10px 12px;background-position:26% center}
+  .brandLeft,.loginBrandHero .brandLeft{grid-template-columns:118px 1px minmax(0,1fr);gap:10px}
+  .powerDinkLogo,.loginBrandHero .powerDinkLogo{width:118px;height:80px}
+  .brandTitle h1,.loginBrandHero .brandTitle h1{font-size:clamp(22px,5.8vw,33px);letter-spacing:-.7px}
+  .brandHero .notifBtn{width:50px;height:50px;min-width:50px}
+}
+@media(max-width:470px){
+  .brandHero{min-height:88px;padding:8px 9px}
+  .brandLeft,.loginBrandHero .brandLeft{grid-template-columns:84px 1px minmax(0,1fr);gap:7px}
+  .powerDinkLogo,.loginBrandHero .powerDinkLogo{width:84px;height:62px}
+  .brandTitle h1,.loginBrandHero .brandTitle h1{font-size:clamp(18px,5.5vw,25px)}
+  .brandHero .notifBtn{width:42px;height:42px;min-width:42px}
 }
