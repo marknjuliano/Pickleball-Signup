@@ -1,4 +1,4 @@
-console.log('Pickleball Signup v2.7.4 loaded');
+console.log('Pickleball Signup v3.0 Site Editor loaded');
 import { auth, db } from './firebase.js';
 import {
   createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut,
@@ -12,12 +12,6 @@ import {
 const $ = sel => document.querySelector(sel);
 const appEl = $('#app');
 const DEFAULT_LOCATIONS = ['DinkHouse','Liberty Park','Cerritos Courts'];
-const BUILTIN_RESERVATION_PRESETS = [
-  {id:'builtin-waiting-6', name:'Waiting for 6 players', message:'Waiting for at least 6 confirmed players before reserving the court.'},
-  {id:'builtin-booking-progress', name:'Court booking in progress', message:'We reserve the court after 6 confirmed players. Tap Playing to help make this event happen.'},
-  {id:'builtin-need-more', name:'Need more players', message:'We still need more confirmed players before booking the court. Invite your friends to join.'},
-  {id:'builtin-details-soon', name:'Reservation details coming soon', message:'Court reservation details are being finalized. Please check back for an update.'}
-];
 const today = () => new Date().toISOString().slice(0,10);
 const USERNAME_DOMAIN = 'users.powerdink.app';
 function normalizeUsername(value=''){ return String(value).trim().toLowerCase().replace(/[^a-z0-9._-]/g,''); }
@@ -41,7 +35,25 @@ async function resolveLoginEmail(identifier=''){
   const record=await usernameRecord(value);
   return String(record?.authEmail||record?.email||usernameToEmail(value)).toLowerCase();
 }
-let state = { user:null, profile:null, events:[], locations:[], notifications:[], messagePresets:[], showNotifications:false, view:localStorage.getItem('pickleballView')||'player', ready:false, calendarMonth:today().slice(0,7), selectedCalendarDate:today() };
+const DEFAULT_SITE_SETTINGS = {
+  appTitle:'Pickleball Signup',
+  playerHeading:'Upcoming Events',
+  playerSubtitle:'The nearest event is featured. All later events are listed below.',
+  nextPlayLabel:'NEXT PLAY DATE',
+  allNextHeading:'All Next Events',
+  signupHeading:'Sign up / Update my family',
+  interestedLabel:'Interested',
+  playingLabel:'Playing',
+  expandLabel:'Expand',
+  showCoordinatorDetails:true,
+  showPlayersList:true,
+  playersDefaultOpen:false,
+  showNextPlayRibbon:true,
+  accent:'#a8d500',
+  spacing:'comfortable'
+};
+function siteSettings(){ return {...DEFAULT_SITE_SETTINGS,...(state.siteSettings||{})}; }
+let state = { user:null, profile:null, events:[], locations:[], notifications:[], showNotifications:false, view:localStorage.getItem('pickleballView')||'player', ready:false, calendarMonth:today().slice(0,7), selectedCalendarDate:today(), siteSettings:{...DEFAULT_SITE_SETTINGS}, editorDraft:null, editorPreviewMode:'desktop' };
 let unsubscribers = [];
 
 
@@ -86,11 +98,11 @@ function statusBadges(ev){
 function eventStatus(ev){ const list=selectedStatuses(ev); return list[0] || {key:'waiting',label:'Waiting',cls:'yellow',icon:'⏳'}; }
 function canSignup(ev){ const closed = ev.closed || ev.closedEvent || ev.cancelled || ev.full; const c=eventCounts(ev); return !closed && !(Number(ev.max||0)>0 && c.playing>=Number(ev.max)) && !isClosedByTime(ev); }
 function cleanup(){ unsubscribers.forEach(u=>u&&u()); unsubscribers=[]; }
-function nav(view){ state.view=view; localStorage.setItem('pickleballView',view); render(); }
+async function nav(view){ state.view=view; localStorage.setItem('pickleballView',view); if(view==='siteEditor' && isCoordinator()) await loadSiteEditorDraft(); render(); }
 window.nav = nav;
 
 onAuthStateChanged(auth, async user => {
-  cleanup(); state.user=user; state.profile=null; state.events=[]; state.locations=[]; state.notifications=[]; state.messagePresets=[]; state.showNotifications=false; state.ready=false;
+  cleanup(); state.user=user; state.profile=null; state.events=[]; state.locations=[]; state.notifications=[]; state.showNotifications=false; state.ready=false;
   if(!user){ renderLogin(); return; }
   await ensureProfile(user);
   startListeners();
@@ -118,9 +130,9 @@ function startListeners(){
   const evQ=query(collection(db,'events'), orderBy('date'));
   unsubscribers.push(onSnapshot(evQ, snap=>{ state.events=snap.docs.map(d=>({id:d.id,...d.data(),signups:Array.isArray(d.data().signups)?d.data().signups:[]})); state.ready=true; render(); }, err=>renderError(err)));
   unsubscribers.push(onSnapshot(collection(db,'locations'), snap=>{ state.locations=snap.docs.map(d=>({id:d.id,...d.data()})); render(); }, err=>console.error(err)));
-  unsubscribers.push(onSnapshot(collection(db,'messagePresets'), snap=>{ state.messagePresets=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''))); render(); }, err=>console.warn('Message presets unavailable',err)));
   const notifQ=query(collection(db,'notifications'), orderBy('createdAt','desc'), limit(50));
   unsubscribers.push(onSnapshot(notifQ, snap=>{ state.notifications=snap.docs.map(d=>({id:d.id,...d.data(),readBy:Array.isArray(d.data().readBy)?d.data().readBy:[]})); render(); }, err=>console.error(err)));
+  unsubscribers.push(onSnapshot(doc(db,'siteSettings','published'), snap=>{ state.siteSettings=snap.exists()?{...DEFAULT_SITE_SETTINGS,...snap.data()}:{...DEFAULT_SITE_SETTINGS}; applyPublishedTheme(); render(); }, err=>console.warn('Site settings unavailable',err)));
   unsubscribers.push(onSnapshot(doc(db,'users',state.user.uid), snap=>{ if(snap.exists()){state.profile={id:state.user.uid,...snap.data(),children:normalizeChildren(snap.data().children)}; render();} }));
 }
 function renderError(err){ appEl.innerHTML=`<div class="wrap"><div class="card"><h2>Firebase Error</h2><div class="error">${esc(err.message)}</div><p class="small">Check Firebase config and Firestore rules.</p></div></div>`; }
@@ -228,10 +240,71 @@ function statusNotificationData(ev,data,isNew){
   }
   return null;
 }
+
+function applyPublishedTheme(){
+  const cfg=siteSettings();
+  document.documentElement.style.setProperty('--site-accent',cfg.accent||DEFAULT_SITE_SETTINGS.accent);
+  document.body.dataset.siteSpacing=cfg.spacing||'comfortable';
+}
+async function loadSiteEditorDraft(){
+  if(state.editorDraft) return;
+  try{
+    const snap=await getDoc(doc(db,'siteSettings','draft'));
+    state.editorDraft=snap.exists()?{...DEFAULT_SITE_SETTINGS,...snap.data()}:{...siteSettings()};
+  }catch(e){ state.editorDraft={...siteSettings()}; }
+}
+function editorSettings(){ return {...siteSettings(),...(state.editorDraft||{})}; }
+window.updateSiteDraft=(key,value)=>{
+  if(!state.editorDraft) state.editorDraft={...siteSettings()};
+  state.editorDraft[key]=value;
+  renderSiteEditorPreview();
+};
+window.updateSiteDraftBool=(key,checked)=>window.updateSiteDraft(key,!!checked);
+window.setEditorPreviewMode=(mode)=>{state.editorPreviewMode=mode; document.querySelector('.sitePreviewFrame')?.setAttribute('data-mode',mode); document.querySelectorAll('.previewModeBtn').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));};
+window.saveSiteDraft=async()=>{
+  if(!isCoordinator()) return;
+  const data={...editorSettings(),updatedAt:serverTimestamp(),updatedBy:state.user.uid};
+  await setDoc(doc(db,'siteSettings','draft'),data,{merge:true});
+  alert('Draft saved. The live Player page was not changed.');
+};
+window.publishSiteChanges=async()=>{
+  if(!isCoordinator()) return;
+  if(!confirm('Publish these changes to the live Player page?')) return;
+  const clean={...editorSettings()}; delete clean.updatedAt; delete clean.updatedBy;
+  await setDoc(doc(db,'siteSettings','published'),{...clean,publishedAt:serverTimestamp(),publishedBy:state.user.uid},{merge:true});
+  await setDoc(doc(db,'siteSettings','draft'),{...clean,updatedAt:serverTimestamp(),updatedBy:state.user.uid},{merge:true});
+  state.siteSettings={...DEFAULT_SITE_SETTINGS,...clean};
+  applyPublishedTheme();
+  alert('Changes published.');
+  renderSiteEditor();
+};
+window.discardSiteChanges=()=>{ if(!confirm('Discard this draft and return to the currently published design?'))return; state.editorDraft={...siteSettings()}; renderSiteEditor(); };
+window.resetSiteDraft=()=>{ if(!confirm('Reset the editor to the default PowerDink settings? This does not publish until you tap Publish Changes.'))return; state.editorDraft={...DEFAULT_SITE_SETTINGS}; renderSiteEditor(); };
+function sitePreviewEvent(){
+  const upcoming=[...state.events].filter(e=>e.date && new Date(e.date+'T23:59:59').getTime()>=Date.now()).sort((a,b)=>(a.date+a.start).localeCompare(b.date+b.start));
+  return upcoming[0]||{date:today(),start:'19:00',end:'22:00',location:'Pickle N\' Play',details:'Coordinator details appear here.',signups:[]};
+}
+function renderSiteEditorPreview(){
+  const root=document.querySelector('#siteEditorPreview'); if(!root) return;
+  const cfg=editorSettings(), ev=sitePreviewEvent();
+  const d=new Date((ev.date||today())+'T12:00:00');
+  const signups=Array.isArray(ev.signups)?ev.signups:[];
+  root.innerHTML=`<div class="previewApp" style="--preview-accent:${esc(cfg.accent)}"><div class="previewHero"><img src="images/powerdink-logo-v271.png" alt="PowerDink"><span></span><h2>${esc(cfg.appTitle)}</h2><button>🔔</button></div><div class="previewTabs"><b>Player</b><span>Calendar</span><span>Profile</span><span>Coordinator</span></div><div class="previewHeading"><h3>${esc(cfg.playerHeading)}</h3><p>${esc(cfg.playerSubtitle)}</p></div><div class="previewEvent"><aside>${cfg.showNextPlayRibbon?`<b>⭐ ${esc(cfg.nextPlayLabel)}</b>`:''}<strong>${d.toLocaleDateString(undefined,{day:'numeric'})}</strong><span>${d.toLocaleDateString(undefined,{month:'short'}).toUpperCase()} ${d.getFullYear()}</span></aside><main><h3>${esc(ev.location)}</h3><p>📍 ${esc(ev.location)}<br>🕒 ${timeLabel(ev.start)} - ${timeLabel(ev.end)}</p><div class="previewNotice"><b>Waiting for court reservation.</b><br>Minimum 6 playing players before booking court.</div>${cfg.showCoordinatorDetails?`<div class="previewDetail"><b>📢 Coordinator Details</b><br>${esc(ev.details||'Coordinator details appear here.')}</div>`:''}<h4>${esc(cfg.signupHeading)}</h4><div class="previewPerson"><span><b>${esc(state.profile?.name||'Player Name')}</b><small>Choose ${esc(cfg.interestedLabel)} or ${esc(cfg.playingLabel)}.</small></span><button>${esc(cfg.interestedLabel)}</button><button>${esc(cfg.playingLabel)}</button></div>${cfg.showPlayersList?`<div class="previewPlayers">👥 Players (${signups.length}) <span>${esc(cfg.expandLabel)}</span></div>`:''}</main></div></div>`;
+  root.closest('.sitePreviewFrame')?.setAttribute('data-mode',state.editorPreviewMode);
+}
+function renderSiteEditor(){
+  if(!isCoordinator()){ nav('player'); return; }
+  if(!state.editorDraft){ loadSiteEditorDraft().then(()=>renderSiteEditor()); return; }
+  const cfg=editorSettings();
+  $('#main').innerHTML=`<section class="siteEditorShell"><div class="siteEditorToolbar"><div><h2>Site Editor</h2><p>Preview changes first. Nothing goes live until you publish.</p></div><div class="editorToolbarActions"><button class="secondary" onclick="saveSiteDraft()">Save Draft</button><button class="secondary" onclick="discardSiteChanges()">Discard</button><button class="secondary" onclick="resetSiteDraft()">Reset</button><button class="publishBtn" onclick="publishSiteChanges()">Publish Changes</button></div></div><div class="siteEditorGrid"><div class="editorPanel"><div class="editorSection"><h3>Branding & Headings</h3><label>App Title</label><input value="${esc(cfg.appTitle)}" oninput="updateSiteDraft('appTitle',this.value)"><label>Player Page Heading</label><input value="${esc(cfg.playerHeading)}" oninput="updateSiteDraft('playerHeading',this.value)"><label>Subtitle</label><textarea oninput="updateSiteDraft('playerSubtitle',this.value)">${esc(cfg.playerSubtitle)}</textarea><label>Accent Color</label><input type="color" value="${esc(cfg.accent)}" oninput="updateSiteDraft('accent',this.value)"></div><div class="editorSection"><h3>Sections</h3><label class="editorToggle"><span>Show “Next Play Date” ribbon</span><input type="checkbox" ${cfg.showNextPlayRibbon?'checked':''} onchange="updateSiteDraftBool('showNextPlayRibbon',this.checked)"></label><label class="editorToggle"><span>Show Coordinator Details</span><input type="checkbox" ${cfg.showCoordinatorDetails?'checked':''} onchange="updateSiteDraftBool('showCoordinatorDetails',this.checked)"></label><label class="editorToggle"><span>Show Players list</span><input type="checkbox" ${cfg.showPlayersList?'checked':''} onchange="updateSiteDraftBool('showPlayersList',this.checked)"></label><label class="editorToggle"><span>Players list expanded by default</span><input type="checkbox" ${cfg.playersDefaultOpen?'checked':''} onchange="updateSiteDraftBool('playersDefaultOpen',this.checked)"></label></div><div class="editorSection"><h3>Button & Section Labels</h3><label>Next Play Date Label</label><input value="${esc(cfg.nextPlayLabel)}" oninput="updateSiteDraft('nextPlayLabel',this.value)"><label>All Next Events Heading</label><input value="${esc(cfg.allNextHeading)}" oninput="updateSiteDraft('allNextHeading',this.value)"><label>Signup Heading</label><input value="${esc(cfg.signupHeading)}" oninput="updateSiteDraft('signupHeading',this.value)"><div class="editorTwoCol"><div><label>Interested</label><input value="${esc(cfg.interestedLabel)}" oninput="updateSiteDraft('interestedLabel',this.value)"></div><div><label>Playing</label><input value="${esc(cfg.playingLabel)}" oninput="updateSiteDraft('playingLabel',this.value)"></div></div><label>Expand Label</label><input value="${esc(cfg.expandLabel)}" oninput="updateSiteDraft('expandLabel',this.value)"></div></div><div class="previewPanel"><div class="previewPanelHead"><div><b>Live Preview</b><span>Draft only</span></div><div><button data-mode="desktop" class="previewModeBtn ${state.editorPreviewMode==='desktop'?'active':''}" onclick="setEditorPreviewMode('desktop')">Desktop</button><button data-mode="mobile" class="previewModeBtn ${state.editorPreviewMode==='mobile'?'active':''}" onclick="setEditorPreviewMode('mobile')">Mobile</button></div></div><div class="sitePreviewFrame" data-mode="${state.editorPreviewMode}"><div id="siteEditorPreview"></div></div></div></div></section>`;
+  renderSiteEditorPreview();
+}
+
 function renderApp(){
- const role=isCoordinator()?'Coordinator':'Player';
- appEl.innerHTML=`<div class="wrap"><div class="hero heroWithBell brandHero"><div class="brandLeft"><img src="images/powerdink-logo-v271.png?v=2.7.3" class="powerDinkLogo" alt="PowerDink logo"><span class="brandDivider"></span><div class="brandTitle"><h1>Pickleball Signup</h1></div></div>${renderNotificationButton()}</div>${renderNotificationDrawer()}<div class="tabs"><button class="tab ${state.view==='player'?'active':''}" onclick="nav('player')">Player</button><button class="tab ${state.view==='calendar'?'active':''}" onclick="nav('calendar')">Calendar</button><button class="tab ${state.view==='profile'?'active':''}" onclick="nav('profile')">Profile</button>${isCoordinator()?`<button class="tab ${state.view==='coordinator'?'active':''}" onclick="nav('coordinator')">Coordinator</button>`:''}<button class="tab" onclick="logout()">Logout</button></div><main id="main"></main></div>`;
- if(state.view==='calendar') renderCalendar(); else if(state.view==='profile') renderProfile(); else if(state.view==='coordinator' && isCoordinator()) renderCoordinator(); else renderPlayer();
+ const cfg=siteSettings();
+ appEl.innerHTML=`<div class="wrap"><div class="hero heroWithBell brandHero"><div class="brandLeft"><img src="images/powerdink-logo-v271.png?v=3.0" class="powerDinkLogo" alt="PowerDink logo"><span class="brandDivider"></span><div class="brandTitle"><h1>${esc(cfg.appTitle)}</h1></div></div>${renderNotificationButton()}</div>${renderNotificationDrawer()}<div class="tabs"><button class="tab ${state.view==='player'?'active':''}" onclick="nav('player')">Player</button><button class="tab ${state.view==='calendar'?'active':''}" onclick="nav('calendar')">Calendar</button><button class="tab ${state.view==='profile'?'active':''}" onclick="nav('profile')">Profile</button>${isCoordinator()?`<button class="tab ${state.view==='coordinator'?'active':''}" onclick="nav('coordinator')">Coordinator</button><button class="tab ${state.view==='siteEditor'?'active':''}" onclick="nav('siteEditor')">Site Editor</button>`:''}<button class="tab" onclick="logout()">Logout</button></div><main id="main"></main></div>`;
+ applyPublishedTheme();
+ if(state.view==='calendar') renderCalendar(); else if(state.view==='profile') renderProfile(); else if(state.view==='coordinator' && isCoordinator()) renderCoordinator(); else if(state.view==='siteEditor' && isCoordinator()) renderSiteEditor(); else renderPlayer();
 }
 function playerEventInner(ev, opts={}){
  const c=eventCounts(ev), st=eventStatus(ev), signups=Array.isArray(ev.signups)?ev.signups:[], mine=signups.filter(s=>s.owner===state.user.uid || s.email===state.user.email), family=[state.profile.name,...normalizeChildren(state.profile.children)].filter(Boolean), closed=!canSignup(ev);
@@ -241,15 +314,15 @@ function playerEventInner(ev, opts={}){
   if(ev.closed) return `<div class="notice warn"><b>Closed for renovation.</b><br>Please see coordinator details below.</div>`;
   if(ev.full) return `<div class="notice warn"><b>Fully booked.</b><br>This play date is currently full.</div>`;
   if(ev.booked) return `<div class="notice"><b>Booking Details</b><br>${esc(ev.details||'Court booked. Details coming soon.')}</div>`;
-  const reservationMessage=String(ev.reservationMessage||'').trim() || 'Waiting for at least 6 confirmed players before reserving the court.';
-  return `<div class="notice warn"><b>Waiting for court reservation.</b><br>${esc(reservationMessage).replace(/\n/g,'<br>')}</div>`;
+  return `<div class="notice warn"><b>Waiting for court reservation.</b><br>Minimum 6 playing players before booking court.</div>`;
  })();
- const detailBox = ev.details ? `<div class="notice info"><b>📢 Coordinator Details</b><br>${esc(ev.details)}</div>` : '';
+ const cfg=siteSettings();
+ const detailBox = cfg.showCoordinatorDetails && ev.details ? `<div class="notice info"><b>📢 Coordinator Details</b><br>${esc(ev.details)}</div>` : '';
  const closedReason = ev.cancelled?'Cancelled':ev.closedEvent?'Closed for event':ev.closed?'Closed for renovation':st.label==='FULLY BOOKED'?'Fully booked':'Signup closed';
  const signupHtml = closed
   ? `<p><span class="badge red">${closedReason}</span></p>`
-  : family.map(n=>{const ex=mine.find(s=>s.name===n);return `<div class="person"><div><b>${esc(n)}</b><div class="small">${ex?esc(ex.status):'Choose Interested or Playing.'}</div></div><div class="actions"><button class="secondary" onclick="upsertSignup('${ev.id}','${idSafe(n)}','interested')">Interested</button><button class="success" onclick="upsertSignup('${ev.id}','${idSafe(n)}','playing')">Playing</button>${ex?`<button class="danger" onclick="removeMySignup('${ev.id}','${idSafe(n)}')">Remove</button>`:''}</div></div>`}).join('');
- return `${statusBox}${detailBox}${ev.feeOn?feeHtml(ev):''}<h3>Sign up / Update my family</h3>${signupHtml}<details class="comingDetails"><summary><span>👥 Players (${signups.length})</span></summary><div class="comingList">${signups.length?signups.map(s=>`<div class="person"><span>${s.status==='playing'?'✅':'👍'} <b>${esc(s.name)}</b> <span class="small">${esc(s.status)}</span></span></div>`).join(''):'<p class="small">No signups yet.</p>'}</div></details>`;
+  : family.map(n=>{const ex=mine.find(s=>s.name===n);return `<div class="person"><div><b>${esc(n)}</b><div class="small">${ex?esc(ex.status):'Choose Interested or Playing.'}</div></div><div class="actions"><button class="secondary" onclick="upsertSignup('${ev.id}','${idSafe(n)}','interested')">${esc(cfg.interestedLabel)}</button><button class="success" onclick="upsertSignup('${ev.id}','${idSafe(n)}','playing')">${esc(cfg.playingLabel)}</button>${ex?`<button class="danger" onclick="removeMySignup('${ev.id}','${idSafe(n)}')">Remove</button>`:''}</div></div>`}).join('');
+ return `${statusBox}${detailBox}${ev.feeOn?feeHtml(ev):''}<h3>${esc(cfg.signupHeading)}</h3>${signupHtml}${cfg.showPlayersList?`<details class="comingDetails" ${cfg.playersDefaultOpen?'open':''}><summary><span>👥 Players (${signups.length})</span></summary><div class="comingList">${signups.length?signups.map(s=>`<div class="person"><span>${s.status==='playing'?'✅':'👍'} <b>${esc(s.name)}</b> <span class="small">${esc(s.status)}</span></span></div>`).join(''):'<p class="small">No signups yet.</p>'}</div></details>`:''}`;
 }
 function eventCardPlayer(ev){
  const c=eventCounts(ev);
@@ -262,11 +335,12 @@ function featuredEventCard(ev){
  const mon=d.toLocaleDateString(undefined,{month:'short'}).toUpperCase();
  const num=d.toLocaleDateString(undefined,{day:'numeric'});
  const year=d.getFullYear();
- return `<section class="featuredEvent"><div class="featuredRibbon">⭐ NEXT PLAY DATE</div><div class="featuredDate"><span>${day}</span><b>${mon}</b><strong>${num}</strong><em>${year}</em></div><div class="featuredMain"><div class="featuredTop"><div><h2>${esc(ev.location)}</h2><p>📍 ${esc(ev.location)}<br>🕒 ${timeLabel(ev.start)} - ${timeLabel(ev.end)}</p></div><div class="featuredBadges">${c.playing>=6?'<span class="badge red">6+ Ready</span>':''}${statusBadges(ev)}</div></div>${playerEventInner(ev)}</div></section>`;
+ const cfg=siteSettings();
+ return `<section class="featuredEvent">${cfg.showNextPlayRibbon?`<div class="featuredRibbon">⭐ ${esc(cfg.nextPlayLabel)}</div>`:''}<div class="featuredDate"><span>${day}</span><b>${mon}</b><strong>${num}</strong><em>${year}</em></div><div class="featuredMain"><div class="featuredTop"><div><h2>${esc(ev.location)}</h2><p>📍 ${esc(ev.location)}<br>🕒 ${timeLabel(ev.start)} - ${timeLabel(ev.end)}</p></div><div class="featuredBadges">${c.playing>=6?'<span class="badge red">6+ Ready</span>':''}${statusBadges(ev)}</div></div>${playerEventInner(ev)}</div></section>`;
 }
 function collapsedEventCard(ev){
  const c=eventCounts(ev);
- return `<details class="eventDetailsCard"><summary><div class="miniDate"><span>${new Date((ev.date||today())+'T12:00:00').toLocaleDateString(undefined,{weekday:'short'})}</span><b>${new Date((ev.date||today())+'T12:00:00').toLocaleDateString(undefined,{month:'short'}).toUpperCase()}</b><strong>${new Date((ev.date||today())+'T12:00:00').toLocaleDateString(undefined,{day:'numeric'})}</strong></div><div class="miniInfo"><b>${esc(ev.location)}</b><span>🕒 ${timeLabel(ev.start)} - ${timeLabel(ev.end)}</span></div><div class="miniStatus">${statusBadges(ev)}</div><div class="miniCount">👥 ${c.total} signed up</div><button class="secondary expandBtn" type="button" onclick="toggleEventDetails(event,this)">Expand</button></summary><div class="eventExpanded">${playerEventInner(ev)}</div></details>`;
+ return `<details class="eventDetailsCard"><summary><div class="miniDate"><span>${new Date((ev.date||today())+'T12:00:00').toLocaleDateString(undefined,{weekday:'short'})}</span><b>${new Date((ev.date||today())+'T12:00:00').toLocaleDateString(undefined,{month:'short'}).toUpperCase()}</b><strong>${new Date((ev.date||today())+'T12:00:00').toLocaleDateString(undefined,{day:'numeric'})}</strong></div><div class="miniInfo"><b>${esc(ev.location)}</b><span>🕒 ${timeLabel(ev.start)} - ${timeLabel(ev.end)}</span></div><div class="miniStatus">${statusBadges(ev)}</div><div class="miniCount">👥 ${c.total} signed up</div><button class="secondary expandBtn" type="button" onclick="toggleEventDetails(event,this)">${esc(siteSettings().expandLabel)}</button></summary><div class="eventExpanded">${playerEventInner(ev)}</div></details>`;
 }
 function renderPlayer(){
  const events=[...state.events].sort((a,b)=>(a.date+a.start).localeCompare(b.date+b.start));
@@ -274,7 +348,7 @@ function renderPlayer(){
  if(!upcoming.length){ $('#main').innerHTML=`<div class="card"><h2>No upcoming play dates</h2><p class="small">Past events are hidden from players. Waiting for the coordinator to add the next event.</p></div>`; return; }
  const current=upcoming[0];
  const future=upcoming.slice(1);
- $('#main').innerHTML=`<div class="sectionTitle"><h2>Upcoming Events</h2><p class="small">The nearest event is featured. All later events are listed below.</p></div>${featuredEventCard(current)}${future.length?`<h2 class="otherTitle">All Next Events</h2>${future.map(collapsedEventCard).join('')}`:''}`;
+ const cfg=siteSettings(); $('#main').innerHTML=`<div class="sectionTitle"><h2>${esc(cfg.playerHeading)}</h2><p class="small">${esc(cfg.playerSubtitle)}</p></div>${featuredEventCard(current)}${future.length?`<h2 class="otherTitle">${esc(cfg.allNextHeading)}</h2>${future.map(collapsedEventCard).join('')}`:''}`;
 }
 function feeHtml(ev){ let v=ev.payment||''; const venmoMatch=String(v).match(/@([A-Za-z0-9_.-]+)/); const venmo=venmoMatch?venmoMatch[1]:''; return `<div class="feeBox"><b>💵 Court Fee:</b> $${esc(ev.fee||'')}<br><b>Payment:</b> ${esc(v)}<div style="margin-top:10px">${venmo?`<button class="secondary" onclick="window.open('https://venmo.com/${venmo}','_blank')">Pay with Venmo</button>`:''}<button class="secondary" onclick="markPaid('${ev.id}')">I Paid</button></div></div>`; }
 window.upsertSignup=async(eid,name,status)=>{const ev=state.events.find(e=>e.id===eid); if(!ev)return; let signups=[...(ev.signups||[])]; let s=signups.find(x=>(x.owner===state.user.uid||x.email===state.user.email)&&x.name===name); if(!canSignup(ev)&&!s)return alert('This play date is closed, cancelled, or fully booked.'); if(s){s.status=status;s.updatedAt=new Date().toISOString();} else signups.push({id:crypto.randomUUID(),owner:state.user.uid,email:state.user.email,name,status,checked:false,paid:false,createdAt:new Date().toISOString()}); await updateDoc(doc(db,'events',eid),{signups});};
@@ -319,47 +393,11 @@ window.addChild=async()=>{const n=$('#childName').value.trim(); if(!n)return; co
 window.editChild=async(i)=>{const children=normalizeChildren(state.profile.children); const old=children[i]; const n=prompt('Child name:',old); if(!n)return; children[i]=n; await updateDoc(doc(db,'users',state.user.uid),{children});};
 window.deleteChild=async(i)=>{const children=normalizeChildren(state.profile.children); if(!confirm('Delete this child from profile?'))return; children.splice(i,1); await updateDoc(doc(db,'users',state.user.uid),{children});};
 function locationOptions(){ const names=state.locations.map(l=>l.name||l.location||l.title||l.id).filter(Boolean); const all=names.length?names:DEFAULT_LOCATIONS; return all.map(l=>`<option>${esc(l)}</option>`).join(''); }
-function allReservationPresets(){
-  return [...BUILTIN_RESERVATION_PRESETS,...state.messagePresets.map(p=>({id:p.id,name:p.name||'Saved message',message:p.message||'',saved:true}))];
-}
-function reservationPresetOptions(currentMessage=''){
-  const presets=allReservationPresets();
-  const matched=presets.find(p=>String(p.message||'').trim()===String(currentMessage||'').trim());
-  return `<option value="">Choose a saved message...</option>${presets.map(p=>`<option value="${esc(p.id)}" ${matched?.id===p.id?'selected':''}>${p.saved?'⭐ ':''}${esc(p.name)}</option>`).join('')}<option value="custom" ${currentMessage&&!matched?'selected':''}>Custom message</option>`;
-}
-window.applyReservationPreset=()=>{
-  const id=$('#reservationPreset')?.value;
-  if(!id || id==='custom') return;
-  const preset=allReservationPresets().find(p=>p.id===id);
-  if(preset && $('#reservationMessage')) $('#reservationMessage').value=preset.message||'';
-};
-window.saveMessagePreset=async()=>{
-  const name=$('#presetName')?.value.trim();
-  const message=$('#presetMessage')?.value.trim();
-  if(!name||!message) return alert('Enter a preset name and message.');
-  try{
-    await addDoc(collection(db,'messagePresets'),{name,message,createdAt:serverTimestamp(),createdBy:state.user.uid});
-    if($('#presetName')) $('#presetName').value='';
-    if($('#presetMessage')) $('#presetMessage').value='';
-    alert('Message preset saved.');
-  }catch(e){alert(friendlyFirebaseError(e));}
-};
-window.editMessagePreset=async(id)=>{
-  const p=state.messagePresets.find(x=>x.id===id); if(!p)return;
-  const name=prompt('Preset name:',p.name||''); if(name===null)return;
-  const message=prompt('Preset message:',p.message||''); if(message===null)return;
-  if(!name.trim()||!message.trim()) return alert('Name and message are required.');
-  try{await updateDoc(doc(db,'messagePresets',id),{name:name.trim(),message:message.trim()});}catch(e){alert(friendlyFirebaseError(e));}
-};
-window.deleteMessagePreset=async(id)=>{
-  if(!confirm('Delete this saved message preset? Existing events will keep their current message.')) return;
-  try{await deleteDoc(doc(db,'messagePresets',id));}catch(e){alert(friendlyFirebaseError(e));}
-};
 function renderCoordinator(){
  const events=[...state.events].sort((a,b)=>(a.date+a.start).localeCompare(b.date+b.start));
  const upcoming=events.filter(e=>!e.date || new Date(e.date+'T23:59:59').getTime()>=Date.now());
  const past=events.filter(e=>e.date && new Date(e.date+'T23:59:59').getTime()<Date.now()).reverse();
- $('#main').innerHTML=`<div class="dash"><div class="stat"><span>Events</span><b>${state.events.length}</b></div><div class="stat"><span>Users</span><b>Live</b></div><div class="stat"><span>Mode</span><b>Cloud</b></div></div><div class="card"><h2>Create / Edit Event</h2><input id="editId" type="hidden"><div class="row"><div><label>Date</label><input id="date" type="date" value="${today()}"></div><div><label>Start</label><input id="start" type="time" value="19:00"></div><div><label>End</label><input id="end" type="time" value="21:00"></div></div><label>Location</label><select id="location">${locationOptions()}</select><div class="row"><div><label>Signup Cutoff</label><select id="cutoff"><option value="open">Keep open</option><option value="1">Close signup 1 hour before</option><option value="2">Close signup 2 hours before</option><option value="4">Close signup 4 hours before</option></select></div><div><label>Max players</label><input id="max" type="number" value="12"></div></div><div class="statusBox"><label>Event Status Options</label><p class="small">You may choose more than one option.</p><div class="statusGrid"><label class="statusChoice"><input id="booked" type="checkbox"><span>✅ Court Booked</span></label><label class="statusChoice"><input id="closed" type="checkbox"><span>🚧 Closed for Renovation</span></label><label class="statusChoice"><input id="closedEvent" type="checkbox"><span>🎉 Closed for Event</span></label><label class="statusChoice"><input id="cancelled" type="checkbox"><span>❌ Cancelled</span></label><label class="statusChoice"><input id="full" type="checkbox"><span>👥 Fully Booked</span></label></div></div><label>Booking Details</label><textarea id="details"></textarea><label>Court Reservation Message</label><select id="reservationPreset" onchange="applyReservationPreset()">${reservationPresetOptions()}</select><p class="small">Choose a reusable message, then edit it below if needed. Your edit applies only to this event unless you save it as a preset.</p><textarea id="reservationMessage" placeholder="Message players will see while the court is not yet booked.">${esc(BUILTIN_RESERVATION_PRESETS[0].message)}</textarea><div class="toggleLine"><input id="feeOn" type="checkbox"><b>Collect court fee?</b></div><div class="row"><input id="fee" placeholder="Fee e.g. 5"><input id="payment" placeholder="Venmo @name, Zelle email, cash"></div><div class="row" style="margin-top:12px"><button onclick="saveEvent()">Save Event</button><button class="secondary" onclick="clearEventForm()">Clear</button></div></div><div class="card"><h2>Upcoming / Current Events</h2>${upcoming.length?upcoming.map(e=>eventCardCoord(e,false)).join(''):'<p class="small">No upcoming events.</p>'}</div><div class="card"><h2>Past Events</h2><p class="small">Past events remain here until you delete them.</p>${past.length?past.map(e=>eventCardCoord(e,true)).join(''):'<p class="small">No past events.</p>'}</div><div class="card"><h2>Manage Court Message Presets</h2><p class="small">Save messages once and reuse them from the Court Reservation Message dropdown.</p>${state.messagePresets.length?state.messagePresets.map(p=>`<div class="person"><div><b>${esc(p.name||'Saved message')}</b><div class="small presetPreview">${esc(p.message||'')}</div></div><span><button class="secondary" onclick="editMessagePreset('${p.id}')">Edit</button> <button class="danger" onclick="deleteMessagePreset('${p.id}')">Delete</button></span></div>`).join(''):'<p class="small">No custom presets yet. Built-in presets are already available in the dropdown.</p>'}<label>Preset Name</label><input id="presetName" placeholder="Example: Waiting for 8 players"><label>Message</label><textarea id="presetMessage" placeholder="Type the reusable message..."></textarea><button style="margin-top:12px" onclick="saveMessagePreset()">Save Message Preset</button></div><div class="card"><h2>Publish Notification</h2><p class="small">Send an in-app message to all players. This is free and saved in Firebase.</p><label>Title</label><input id="manualNotifTitle" placeholder="Example: DinkHouse update"><label>Message</label><textarea id="manualNotifMessage" placeholder="Type your update here..."></textarea><label>Type</label><select id="manualNotifType"><option value="info">Info</option><option value="event">New Event</option><option value="booked">Booked</option><option value="full">Fully Booked</option><option value="renovation">Closed for Renovation</option><option value="closedEvent">Closed for Event</option><option value="cancelled">Cancelled</option></select><button style="margin-top:12px" onclick="publishManualNotification()">Publish Notification</button></div><div class="card"><h2>Manage Locations</h2>${state.locations.map(l=>`<div class="person"><b>${esc(l.name||l.location||l.title||l.id)}</b><span><button class="secondary" onclick="renameLocation('${l.id}')">Edit</button> <button class="danger" onclick="deleteLocation('${l.id}')">Delete</button></span></div>`).join('')||'<p class="small">No locations yet.</p>'}<div class="row"><input id="newLocation" placeholder="New location"><button onclick="addLocation()">Add Location</button></div></div>`;
+ $('#main').innerHTML=`<div class="dash"><div class="stat"><span>Events</span><b>${state.events.length}</b></div><div class="stat"><span>Users</span><b>Live</b></div><div class="stat"><span>Mode</span><b>Cloud</b></div></div><div class="card siteEditorPromo"><div><h2>Site Editor</h2><p class="small">Change player-page text, labels, visibility, and accent color with a live Desktop/Mobile preview. Publish only when you are ready.</p></div><button onclick="nav('siteEditor')">Open Site Editor</button></div><div class="card"><h2>Create / Edit Event</h2><input id="editId" type="hidden"><div class="row"><div><label>Date</label><input id="date" type="date" value="${today()}"></div><div><label>Start</label><input id="start" type="time" value="19:00"></div><div><label>End</label><input id="end" type="time" value="21:00"></div></div><label>Location</label><select id="location">${locationOptions()}</select><div class="row"><div><label>Signup Cutoff</label><select id="cutoff"><option value="open">Keep open</option><option value="1">Close signup 1 hour before</option><option value="2">Close signup 2 hours before</option><option value="4">Close signup 4 hours before</option></select></div><div><label>Max players</label><input id="max" type="number" value="12"></div></div><div class="statusBox"><label>Event Status Options</label><p class="small">You may choose more than one option.</p><div class="statusGrid"><label class="statusChoice"><input id="booked" type="checkbox"><span>✅ Court Booked</span></label><label class="statusChoice"><input id="closed" type="checkbox"><span>🚧 Closed for Renovation</span></label><label class="statusChoice"><input id="closedEvent" type="checkbox"><span>🎉 Closed for Event</span></label><label class="statusChoice"><input id="cancelled" type="checkbox"><span>❌ Cancelled</span></label><label class="statusChoice"><input id="full" type="checkbox"><span>👥 Fully Booked</span></label></div></div><label>Booking Details</label><textarea id="details"></textarea><div class="toggleLine"><input id="feeOn" type="checkbox"><b>Collect court fee?</b></div><div class="row"><input id="fee" placeholder="Fee e.g. 5"><input id="payment" placeholder="Venmo @name, Zelle email, cash"></div><div class="row" style="margin-top:12px"><button onclick="saveEvent()">Save Event</button><button class="secondary" onclick="clearEventForm()">Clear</button></div></div><div class="card"><h2>Upcoming / Current Events</h2>${upcoming.length?upcoming.map(e=>eventCardCoord(e,false)).join(''):'<p class="small">No upcoming events.</p>'}</div><div class="card"><h2>Past Events</h2><p class="small">Past events remain here until you delete them.</p>${past.length?past.map(e=>eventCardCoord(e,true)).join(''):'<p class="small">No past events.</p>'}</div><div class="card"><h2>Publish Notification</h2><p class="small">Send an in-app message to all players. This is free and saved in Firebase.</p><label>Title</label><input id="manualNotifTitle" placeholder="Example: DinkHouse update"><label>Message</label><textarea id="manualNotifMessage" placeholder="Type your update here..."></textarea><label>Type</label><select id="manualNotifType"><option value="info">Info</option><option value="event">New Event</option><option value="booked">Booked</option><option value="full">Fully Booked</option><option value="renovation">Closed for Renovation</option><option value="closedEvent">Closed for Event</option><option value="cancelled">Cancelled</option></select><button style="margin-top:12px" onclick="publishManualNotification()">Publish Notification</button></div><div class="card"><h2>Manage Locations</h2>${state.locations.map(l=>`<div class="person"><b>${esc(l.name||l.location||l.title||l.id)}</b><span><button class="secondary" onclick="renameLocation('${l.id}')">Edit</button> <button class="danger" onclick="deleteLocation('${l.id}')">Delete</button></span></div>`).join('')||'<p class="small">No locations yet.</p>'}<div class="row"><input id="newLocation" placeholder="New location"><button onclick="addLocation()">Add Location</button></div></div>`;
 }
 function eventCardCoord(ev,isPast=false){
  const c=eventCounts(ev);
@@ -376,8 +414,8 @@ window.publishManualNotification=async()=>{
   renderCoordinator();
 };
 
-window.saveEvent=async()=>{ const id=$('#editId').value; const data={date:$('#date').value,start:$('#start').value,end:$('#end').value,location:$('#location').value,cutoff:$('#cutoff').value,max:$('#max').value,booked:$('#booked').checked,closed:$('#closed').checked,closedEvent:$('#closedEvent').checked,cancelled:$('#cancelled').checked,full:$('#full').checked,details:$('#details').value,reservationMessage:$('#reservationMessage').value.trim(),feeOn:$('#feeOn').checked,fee:$('#fee').value,payment:$('#payment').value}; if(!data.date||!data.start||!data.end||!data.location)return alert('Complete date, time, and location.'); if(id){ const oldEv=state.events.find(e=>e.id===id); await updateDoc(doc(db,'events',id),data); const n=statusNotificationData(oldEv,data,false); if(n) await createNotification(n); } else { const ref=await addDoc(collection(db,'events'),{...data,signups:[],createdAt:serverTimestamp()}); const n=statusNotificationData(null,data,true); if(n) await createNotification({...n,eventId:ref.id}); } clearEventForm(); };
-window.editEvent=(id)=>{ const e=state.events.find(x=>x.id===id); ['date','start','end','location','cutoff','max','details','reservationMessage','fee','payment'].forEach(k=>{const el=$('#'+k); if(el) el.value=e[k]||''}); $('#editId').value=e.id; $('#booked').checked=!!e.booked; $('#closed').checked=!!e.closed; $('#closedEvent').checked=!!e.closedEvent; $('#cancelled').checked=!!e.cancelled; $('#full').checked=!!e.full; $('#feeOn').checked=!!e.feeOn; if($('#reservationPreset')) $('#reservationPreset').innerHTML=reservationPresetOptions(e.reservationMessage||''); window.scrollTo({top:0,behavior:'smooth'}); };
+window.saveEvent=async()=>{ const id=$('#editId').value; const data={date:$('#date').value,start:$('#start').value,end:$('#end').value,location:$('#location').value,cutoff:$('#cutoff').value,max:$('#max').value,booked:$('#booked').checked,closed:$('#closed').checked,closedEvent:$('#closedEvent').checked,cancelled:$('#cancelled').checked,full:$('#full').checked,details:$('#details').value,feeOn:$('#feeOn').checked,fee:$('#fee').value,payment:$('#payment').value}; if(!data.date||!data.start||!data.end||!data.location)return alert('Complete date, time, and location.'); if(id){ const oldEv=state.events.find(e=>e.id===id); await updateDoc(doc(db,'events',id),data); const n=statusNotificationData(oldEv,data,false); if(n) await createNotification(n); } else { const ref=await addDoc(collection(db,'events'),{...data,signups:[],createdAt:serverTimestamp()}); const n=statusNotificationData(null,data,true); if(n) await createNotification({...n,eventId:ref.id}); } clearEventForm(); };
+window.editEvent=(id)=>{ const e=state.events.find(x=>x.id===id); ['date','start','end','location','cutoff','max','details','fee','payment'].forEach(k=>{const el=$('#'+k); if(el) el.value=e[k]||''}); $('#editId').value=e.id; $('#booked').checked=!!e.booked; $('#closed').checked=!!e.closed; $('#closedEvent').checked=!!e.closedEvent; $('#cancelled').checked=!!e.cancelled; $('#full').checked=!!e.full; $('#feeOn').checked=!!e.feeOn; window.scrollTo({top:0,behavior:'smooth'}); };
 window.clearEventForm=()=>renderCoordinator();
 window.deleteEvent=async(id)=>{ if(confirm('Delete this event?')) await deleteDoc(doc(db,'events',id)); };
 window.removeSignup=async(eid,sid)=>{ const ev=state.events.find(e=>e.id===eid); await updateDoc(doc(db,'events',eid),{signups:(ev.signups||[]).filter(s=>s.id!==sid)}); };

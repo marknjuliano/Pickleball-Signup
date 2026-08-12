@@ -685,8 +685,44 @@
   .brandHero .notifBtn{width:43px;height:43px;min-width:43px;border-radius:14px;font-size:19px}
 }
 
-/* v2.7.4 — reusable court reservation message presets */
-#reservationPreset{margin-bottom:8px}
-#reservationMessage{min-height:105px}
-.presetPreview{margin-top:5px;white-space:pre-wrap;line-height:1.35;max-width:620px}
-@media(max-width:620px){.presetPreview{max-width:none}.card .person>span{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}}
+/* v3.0 — Admin Site Editor + published theme hooks */
+:root{--site-accent:#a8d500}
+body[data-site-spacing="compact"] .card{padding:16px;margin:12px 0}
+body[data-site-spacing="compact"] .featuredMain{padding-top:30px;padding-bottom:18px}
+.brandDivider{background:linear-gradient(180deg,transparent,var(--site-accent),transparent)!important}
+.featuredEvent{border-color:color-mix(in srgb,var(--site-accent) 58%,#78cdfb)!important}
+.featuredRibbon{color:color-mix(in srgb,var(--site-accent) 76%,#006f5c)!important}
+.tab.active{border-color:color-mix(in srgb,var(--site-accent) 42%,transparent)!important}
+.siteEditorPromo{display:flex;align-items:center;justify-content:space-between;gap:18px;border:1px solid color-mix(in srgb,var(--site-accent) 35%,#dfe6ef);background:linear-gradient(135deg,#fff,color-mix(in srgb,var(--site-accent) 6%,#fff))}
+.siteEditorPromo h2{margin-bottom:6px}
+.siteEditorPromo p{margin:0;max-width:650px}
+.siteEditorPromo button,.publishBtn{background:linear-gradient(135deg,#172033,color-mix(in srgb,var(--site-accent) 35%,#172033));color:#fff}
+
+.siteEditorShell{margin-top:8px}
+.siteEditorToolbar{position:sticky;top:0;z-index:12;display:flex;align-items:center;justify-content:space-between;gap:18px;padding:16px 18px;margin-bottom:16px;background:rgba(247,249,252,.94);backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:20px;box-shadow:0 10px 28px rgba(20,30,55,.08)}
+.siteEditorToolbar h2{margin:0 0 3px}.siteEditorToolbar p{margin:0;color:var(--muted);font-size:14px}
+.editorToolbarActions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.siteEditorGrid{display:grid;grid-template-columns:minmax(310px,.82fr) minmax(420px,1.5fr);gap:18px;align-items:start}
+.editorPanel,.previewPanel{min-width:0}
+.editorSection{background:#fff;border:1px solid var(--line);border-radius:20px;padding:18px;margin-bottom:14px;box-shadow:0 10px 28px rgba(20,30,55,.06)}
+.editorSection h3{margin:0 0 14px;font-size:18px}.editorSection label{font-size:14px}.editorSection textarea{min-height:82px}
+.editorTwoCol{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.editorToggle{display:flex;align-items:center;justify-content:space-between;gap:16px;border:1px solid var(--line);border-radius:14px;padding:12px 13px;background:#fbfdff;margin:9px 0}
+.editorToggle input{width:22px;height:22px;flex:none;accent-color:var(--site-accent)}
+.previewPanel{position:sticky;top:96px;background:#fff;border:1px solid var(--line);border-radius:22px;overflow:hidden;box-shadow:0 14px 34px rgba(20,30,55,.09)}
+.previewPanelHead{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 16px;border-bottom:1px solid var(--line);background:#f9fbfd}
+.previewPanelHead>div:first-child b,.previewPanelHead>div:first-child span{display:block}.previewPanelHead>div:first-child span{color:var(--muted);font-size:12px;margin-top:2px}
+.previewModeBtn{padding:9px 12px;border-radius:12px;background:#edf2f7;color:#172033;box-shadow:none}.previewModeBtn.active{background:#172033;color:#fff}
+.sitePreviewFrame{padding:16px;background:#edf2f7;overflow:auto;min-height:650px}
+.sitePreviewFrame #siteEditorPreview{width:100%;margin:auto;transition:max-width .2s ease}
+.sitePreviewFrame[data-mode="mobile"] #siteEditorPreview{max-width:390px}
+.previewApp{background:#f4f8ff;border-radius:18px;overflow:hidden;min-height:590px;box-shadow:0 8px 24px rgba(20,30,55,.12);font-size:13px;color:#172033}
+.previewHero{height:92px;display:grid;grid-template-columns:135px 1px minmax(0,1fr) 46px;align-items:center;gap:14px;padding:10px 16px;background:#050706 url('../images/powerdink-header-v271.jpg') center/cover no-repeat;border-bottom:1px solid color-mix(in srgb,var(--preview-accent) 60%,transparent)}
+.previewHero img{width:126px;height:76px;object-fit:contain}.previewHero>span{height:60px;background:var(--preview-accent)}.previewHero h2{color:#fff;font-size:28px;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.previewHero button{width:42px;height:42px;padding:0;border-radius:12px;border:1px solid color-mix(in srgb,var(--preview-accent) 65%,transparent);background:#111;color:#fff}
+.previewTabs{display:flex;gap:8px;padding:12px;background:#f4f8ff;border-bottom:1px solid #dfe6ef}.previewTabs>*{padding:8px 11px;border-radius:10px;background:#fff}.previewTabs b{background:#172033;color:#fff}
+.previewHeading{padding:16px 18px 8px}.previewHeading h3{font-size:21px;margin:0 0 4px}.previewHeading p{margin:0;color:#687386}
+.previewEvent{display:grid;grid-template-columns:120px 1fr;margin:12px 16px 18px;background:#fff;border:1px solid #dfe6ef;border-radius:18px;overflow:hidden}.previewEvent aside{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px 10px;border-right:1px solid #dfe6ef;background:linear-gradient(180deg,#fff,color-mix(in srgb,var(--preview-accent) 5%,#fff))}.previewEvent aside>b{font-size:11px;color:color-mix(in srgb,var(--preview-accent) 70%,#526078);text-align:center}.previewEvent aside strong{font-size:46px;line-height:1;margin-top:18px}.previewEvent aside span{font-weight:800;color:#526078}.previewEvent main{padding:17px}.previewEvent main>h3{font-size:23px;margin:0 0 7px}.previewEvent main>p{line-height:1.5;margin:0 0 12px}.previewNotice,.previewDetail{border:1px solid #dfe6ef;border-radius:12px;padding:10px 12px;margin:10px 0}.previewNotice{border-color:color-mix(in srgb,var(--preview-accent) 55%,#e7d788);background:color-mix(in srgb,var(--preview-accent) 5%,#fffaf0)}.previewDetail{background:#f6f9ff}.previewEvent h4{font-size:17px;margin:14px 0 8px}.previewPerson{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:7px;align-items:center;border:1px solid #dfe6ef;border-radius:12px;padding:10px}.previewPerson small{display:block;color:#687386;margin-top:2px}.previewPerson button{font-size:11px;padding:8px 9px;background:#edf2f7;color:#172033;box-shadow:none}.previewPerson button:last-child{background:var(--preview-accent);color:#172033}.previewPlayers{display:flex;justify-content:space-between;align-items:center;border:1px solid #dfe6ef;border-radius:12px;padding:11px;margin-top:10px;font-weight:800}.previewPlayers span{font-size:11px;color:#687386}
+.sitePreviewFrame[data-mode="mobile"] .previewHero{height:76px;grid-template-columns:90px 1px minmax(0,1fr) 36px;gap:8px;padding:7px 9px}.sitePreviewFrame[data-mode="mobile"] .previewHero img{width:86px;height:58px}.sitePreviewFrame[data-mode="mobile"] .previewHero>span{height:46px}.sitePreviewFrame[data-mode="mobile"] .previewHero h2{font-size:18px}.sitePreviewFrame[data-mode="mobile"] .previewHero button{width:34px;height:34px;font-size:13px}.sitePreviewFrame[data-mode="mobile"] .previewTabs{gap:5px;padding:8px;overflow:hidden}.sitePreviewFrame[data-mode="mobile"] .previewTabs>*{font-size:10px;padding:7px 8px;white-space:nowrap}.sitePreviewFrame[data-mode="mobile"] .previewHeading{padding:13px 12px 5px}.sitePreviewFrame[data-mode="mobile"] .previewHeading h3{font-size:19px}.sitePreviewFrame[data-mode="mobile"] .previewEvent{display:block;margin:10px}.sitePreviewFrame[data-mode="mobile"] .previewEvent aside{flex-direction:row;gap:8px;border-right:0;border-bottom:1px solid #dfe6ef;padding:9px}.sitePreviewFrame[data-mode="mobile"] .previewEvent aside strong{font-size:30px;margin:0}.sitePreviewFrame[data-mode="mobile"] .previewEvent main{padding:12px}.sitePreviewFrame[data-mode="mobile"] .previewPerson{grid-template-columns:1fr 1fr}.sitePreviewFrame[data-mode="mobile"] .previewPerson>span{grid-column:1/-1}
+
+@media(max-width:980px){.siteEditorGrid{grid-template-columns:1fr}.previewPanel{position:relative;top:auto}.siteEditorToolbar{position:relative;top:auto;display:block}.editorToolbarActions{justify-content:flex-start;margin-top:12px}.siteEditorPromo{display:block}.siteEditorPromo button{margin-top:12px}}
+@media(max-width:620px){.editorTwoCol{grid-template-columns:1fr}.siteEditorToolbar{padding:14px}.editorToolbarActions button{flex:1 1 calc(50% - 8px)}.sitePreviewFrame{padding:8px;min-height:560px}.previewPanelHead{display:block}.previewPanelHead>div:last-child{margin-top:10px}.siteEditorPromo button{width:100%}}
