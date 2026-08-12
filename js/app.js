@@ -1,4 +1,4 @@
-console.log('Pickleball Signup v2.7.3 loaded');
+console.log('Pickleball Signup v2.7.4 loaded');
 import { auth, db } from './firebase.js';
 import {
   createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut,
@@ -12,6 +12,12 @@ import {
 const $ = sel => document.querySelector(sel);
 const appEl = $('#app');
 const DEFAULT_LOCATIONS = ['DinkHouse','Liberty Park','Cerritos Courts'];
+const BUILTIN_RESERVATION_PRESETS = [
+  {id:'builtin-waiting-6', name:'Waiting for 6 players', message:'Waiting for at least 6 confirmed players before reserving the court.'},
+  {id:'builtin-booking-progress', name:'Court booking in progress', message:'We reserve the court after 6 confirmed players. Tap Playing to help make this event happen.'},
+  {id:'builtin-need-more', name:'Need more players', message:'We still need more confirmed players before booking the court. Invite your friends to join.'},
+  {id:'builtin-details-soon', name:'Reservation details coming soon', message:'Court reservation details are being finalized. Please check back for an update.'}
+];
 const today = () => new Date().toISOString().slice(0,10);
 const USERNAME_DOMAIN = 'users.powerdink.app';
 function normalizeUsername(value=''){ return String(value).trim().toLowerCase().replace(/[^a-z0-9._-]/g,''); }
@@ -35,7 +41,7 @@ async function resolveLoginEmail(identifier=''){
   const record=await usernameRecord(value);
   return String(record?.authEmail||record?.email||usernameToEmail(value)).toLowerCase();
 }
-let state = { user:null, profile:null, events:[], locations:[], notifications:[], showNotifications:false, view:localStorage.getItem('pickleballView')||'player', ready:false, calendarMonth:today().slice(0,7), selectedCalendarDate:today() };
+let state = { user:null, profile:null, events:[], locations:[], notifications:[], messagePresets:[], showNotifications:false, view:localStorage.getItem('pickleballView')||'player', ready:false, calendarMonth:today().slice(0,7), selectedCalendarDate:today() };
 let unsubscribers = [];
 
 
@@ -84,7 +90,7 @@ function nav(view){ state.view=view; localStorage.setItem('pickleballView',view)
 window.nav = nav;
 
 onAuthStateChanged(auth, async user => {
-  cleanup(); state.user=user; state.profile=null; state.events=[]; state.locations=[]; state.notifications=[]; state.showNotifications=false; state.ready=false;
+  cleanup(); state.user=user; state.profile=null; state.events=[]; state.locations=[]; state.notifications=[]; state.messagePresets=[]; state.showNotifications=false; state.ready=false;
   if(!user){ renderLogin(); return; }
   await ensureProfile(user);
   startListeners();
@@ -112,6 +118,7 @@ function startListeners(){
   const evQ=query(collection(db,'events'), orderBy('date'));
   unsubscribers.push(onSnapshot(evQ, snap=>{ state.events=snap.docs.map(d=>({id:d.id,...d.data(),signups:Array.isArray(d.data().signups)?d.data().signups:[]})); state.ready=true; render(); }, err=>renderError(err)));
   unsubscribers.push(onSnapshot(collection(db,'locations'), snap=>{ state.locations=snap.docs.map(d=>({id:d.id,...d.data()})); render(); }, err=>console.error(err)));
+  unsubscribers.push(onSnapshot(collection(db,'messagePresets'), snap=>{ state.messagePresets=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''))); render(); }, err=>console.warn('Message presets unavailable',err)));
   const notifQ=query(collection(db,'notifications'), orderBy('createdAt','desc'), limit(50));
   unsubscribers.push(onSnapshot(notifQ, snap=>{ state.notifications=snap.docs.map(d=>({id:d.id,...d.data(),readBy:Array.isArray(d.data().readBy)?d.data().readBy:[]})); render(); }, err=>console.error(err)));
   unsubscribers.push(onSnapshot(doc(db,'users',state.user.uid), snap=>{ if(snap.exists()){state.profile={id:state.user.uid,...snap.data(),children:normalizeChildren(snap.data().children)}; render();} }));
@@ -234,7 +241,8 @@ function playerEventInner(ev, opts={}){
   if(ev.closed) return `<div class="notice warn"><b>Closed for renovation.</b><br>Please see coordinator details below.</div>`;
   if(ev.full) return `<div class="notice warn"><b>Fully booked.</b><br>This play date is currently full.</div>`;
   if(ev.booked) return `<div class="notice"><b>Booking Details</b><br>${esc(ev.details||'Court booked. Details coming soon.')}</div>`;
-  return `<div class="notice warn"><b>Waiting for court reservation.</b><br>Minimum 6 playing players before booking court.</div>`;
+  const reservationMessage=String(ev.reservationMessage||'').trim() || 'Waiting for at least 6 confirmed players before reserving the court.';
+  return `<div class="notice warn"><b>Waiting for court reservation.</b><br>${esc(reservationMessage).replace(/\n/g,'<br>')}</div>`;
  })();
  const detailBox = ev.details ? `<div class="notice info"><b>📢 Coordinator Details</b><br>${esc(ev.details)}</div>` : '';
  const closedReason = ev.cancelled?'Cancelled':ev.closedEvent?'Closed for event':ev.closed?'Closed for renovation':st.label==='FULLY BOOKED'?'Fully booked':'Signup closed';
@@ -311,11 +319,47 @@ window.addChild=async()=>{const n=$('#childName').value.trim(); if(!n)return; co
 window.editChild=async(i)=>{const children=normalizeChildren(state.profile.children); const old=children[i]; const n=prompt('Child name:',old); if(!n)return; children[i]=n; await updateDoc(doc(db,'users',state.user.uid),{children});};
 window.deleteChild=async(i)=>{const children=normalizeChildren(state.profile.children); if(!confirm('Delete this child from profile?'))return; children.splice(i,1); await updateDoc(doc(db,'users',state.user.uid),{children});};
 function locationOptions(){ const names=state.locations.map(l=>l.name||l.location||l.title||l.id).filter(Boolean); const all=names.length?names:DEFAULT_LOCATIONS; return all.map(l=>`<option>${esc(l)}</option>`).join(''); }
+function allReservationPresets(){
+  return [...BUILTIN_RESERVATION_PRESETS,...state.messagePresets.map(p=>({id:p.id,name:p.name||'Saved message',message:p.message||'',saved:true}))];
+}
+function reservationPresetOptions(currentMessage=''){
+  const presets=allReservationPresets();
+  const matched=presets.find(p=>String(p.message||'').trim()===String(currentMessage||'').trim());
+  return `<option value="">Choose a saved message...</option>${presets.map(p=>`<option value="${esc(p.id)}" ${matched?.id===p.id?'selected':''}>${p.saved?'⭐ ':''}${esc(p.name)}</option>`).join('')}<option value="custom" ${currentMessage&&!matched?'selected':''}>Custom message</option>`;
+}
+window.applyReservationPreset=()=>{
+  const id=$('#reservationPreset')?.value;
+  if(!id || id==='custom') return;
+  const preset=allReservationPresets().find(p=>p.id===id);
+  if(preset && $('#reservationMessage')) $('#reservationMessage').value=preset.message||'';
+};
+window.saveMessagePreset=async()=>{
+  const name=$('#presetName')?.value.trim();
+  const message=$('#presetMessage')?.value.trim();
+  if(!name||!message) return alert('Enter a preset name and message.');
+  try{
+    await addDoc(collection(db,'messagePresets'),{name,message,createdAt:serverTimestamp(),createdBy:state.user.uid});
+    if($('#presetName')) $('#presetName').value='';
+    if($('#presetMessage')) $('#presetMessage').value='';
+    alert('Message preset saved.');
+  }catch(e){alert(friendlyFirebaseError(e));}
+};
+window.editMessagePreset=async(id)=>{
+  const p=state.messagePresets.find(x=>x.id===id); if(!p)return;
+  const name=prompt('Preset name:',p.name||''); if(name===null)return;
+  const message=prompt('Preset message:',p.message||''); if(message===null)return;
+  if(!name.trim()||!message.trim()) return alert('Name and message are required.');
+  try{await updateDoc(doc(db,'messagePresets',id),{name:name.trim(),message:message.trim()});}catch(e){alert(friendlyFirebaseError(e));}
+};
+window.deleteMessagePreset=async(id)=>{
+  if(!confirm('Delete this saved message preset? Existing events will keep their current message.')) return;
+  try{await deleteDoc(doc(db,'messagePresets',id));}catch(e){alert(friendlyFirebaseError(e));}
+};
 function renderCoordinator(){
  const events=[...state.events].sort((a,b)=>(a.date+a.start).localeCompare(b.date+b.start));
  const upcoming=events.filter(e=>!e.date || new Date(e.date+'T23:59:59').getTime()>=Date.now());
  const past=events.filter(e=>e.date && new Date(e.date+'T23:59:59').getTime()<Date.now()).reverse();
- $('#main').innerHTML=`<div class="dash"><div class="stat"><span>Events</span><b>${state.events.length}</b></div><div class="stat"><span>Users</span><b>Live</b></div><div class="stat"><span>Mode</span><b>Cloud</b></div></div><div class="card"><h2>Create / Edit Event</h2><input id="editId" type="hidden"><div class="row"><div><label>Date</label><input id="date" type="date" value="${today()}"></div><div><label>Start</label><input id="start" type="time" value="19:00"></div><div><label>End</label><input id="end" type="time" value="21:00"></div></div><label>Location</label><select id="location">${locationOptions()}</select><div class="row"><div><label>Signup Cutoff</label><select id="cutoff"><option value="open">Keep open</option><option value="1">Close signup 1 hour before</option><option value="2">Close signup 2 hours before</option><option value="4">Close signup 4 hours before</option></select></div><div><label>Max players</label><input id="max" type="number" value="12"></div></div><div class="statusBox"><label>Event Status Options</label><p class="small">You may choose more than one option.</p><div class="statusGrid"><label class="statusChoice"><input id="booked" type="checkbox"><span>✅ Court Booked</span></label><label class="statusChoice"><input id="closed" type="checkbox"><span>🚧 Closed for Renovation</span></label><label class="statusChoice"><input id="closedEvent" type="checkbox"><span>🎉 Closed for Event</span></label><label class="statusChoice"><input id="cancelled" type="checkbox"><span>❌ Cancelled</span></label><label class="statusChoice"><input id="full" type="checkbox"><span>👥 Fully Booked</span></label></div></div><label>Booking Details</label><textarea id="details"></textarea><div class="toggleLine"><input id="feeOn" type="checkbox"><b>Collect court fee?</b></div><div class="row"><input id="fee" placeholder="Fee e.g. 5"><input id="payment" placeholder="Venmo @name, Zelle email, cash"></div><div class="row" style="margin-top:12px"><button onclick="saveEvent()">Save Event</button><button class="secondary" onclick="clearEventForm()">Clear</button></div></div><div class="card"><h2>Upcoming / Current Events</h2>${upcoming.length?upcoming.map(e=>eventCardCoord(e,false)).join(''):'<p class="small">No upcoming events.</p>'}</div><div class="card"><h2>Past Events</h2><p class="small">Past events remain here until you delete them.</p>${past.length?past.map(e=>eventCardCoord(e,true)).join(''):'<p class="small">No past events.</p>'}</div><div class="card"><h2>Publish Notification</h2><p class="small">Send an in-app message to all players. This is free and saved in Firebase.</p><label>Title</label><input id="manualNotifTitle" placeholder="Example: DinkHouse update"><label>Message</label><textarea id="manualNotifMessage" placeholder="Type your update here..."></textarea><label>Type</label><select id="manualNotifType"><option value="info">Info</option><option value="event">New Event</option><option value="booked">Booked</option><option value="full">Fully Booked</option><option value="renovation">Closed for Renovation</option><option value="closedEvent">Closed for Event</option><option value="cancelled">Cancelled</option></select><button style="margin-top:12px" onclick="publishManualNotification()">Publish Notification</button></div><div class="card"><h2>Manage Locations</h2>${state.locations.map(l=>`<div class="person"><b>${esc(l.name||l.location||l.title||l.id)}</b><span><button class="secondary" onclick="renameLocation('${l.id}')">Edit</button> <button class="danger" onclick="deleteLocation('${l.id}')">Delete</button></span></div>`).join('')||'<p class="small">No locations yet.</p>'}<div class="row"><input id="newLocation" placeholder="New location"><button onclick="addLocation()">Add Location</button></div></div>`;
+ $('#main').innerHTML=`<div class="dash"><div class="stat"><span>Events</span><b>${state.events.length}</b></div><div class="stat"><span>Users</span><b>Live</b></div><div class="stat"><span>Mode</span><b>Cloud</b></div></div><div class="card"><h2>Create / Edit Event</h2><input id="editId" type="hidden"><div class="row"><div><label>Date</label><input id="date" type="date" value="${today()}"></div><div><label>Start</label><input id="start" type="time" value="19:00"></div><div><label>End</label><input id="end" type="time" value="21:00"></div></div><label>Location</label><select id="location">${locationOptions()}</select><div class="row"><div><label>Signup Cutoff</label><select id="cutoff"><option value="open">Keep open</option><option value="1">Close signup 1 hour before</option><option value="2">Close signup 2 hours before</option><option value="4">Close signup 4 hours before</option></select></div><div><label>Max players</label><input id="max" type="number" value="12"></div></div><div class="statusBox"><label>Event Status Options</label><p class="small">You may choose more than one option.</p><div class="statusGrid"><label class="statusChoice"><input id="booked" type="checkbox"><span>✅ Court Booked</span></label><label class="statusChoice"><input id="closed" type="checkbox"><span>🚧 Closed for Renovation</span></label><label class="statusChoice"><input id="closedEvent" type="checkbox"><span>🎉 Closed for Event</span></label><label class="statusChoice"><input id="cancelled" type="checkbox"><span>❌ Cancelled</span></label><label class="statusChoice"><input id="full" type="checkbox"><span>👥 Fully Booked</span></label></div></div><label>Booking Details</label><textarea id="details"></textarea><label>Court Reservation Message</label><select id="reservationPreset" onchange="applyReservationPreset()">${reservationPresetOptions()}</select><p class="small">Choose a reusable message, then edit it below if needed. Your edit applies only to this event unless you save it as a preset.</p><textarea id="reservationMessage" placeholder="Message players will see while the court is not yet booked.">${esc(BUILTIN_RESERVATION_PRESETS[0].message)}</textarea><div class="toggleLine"><input id="feeOn" type="checkbox"><b>Collect court fee?</b></div><div class="row"><input id="fee" placeholder="Fee e.g. 5"><input id="payment" placeholder="Venmo @name, Zelle email, cash"></div><div class="row" style="margin-top:12px"><button onclick="saveEvent()">Save Event</button><button class="secondary" onclick="clearEventForm()">Clear</button></div></div><div class="card"><h2>Upcoming / Current Events</h2>${upcoming.length?upcoming.map(e=>eventCardCoord(e,false)).join(''):'<p class="small">No upcoming events.</p>'}</div><div class="card"><h2>Past Events</h2><p class="small">Past events remain here until you delete them.</p>${past.length?past.map(e=>eventCardCoord(e,true)).join(''):'<p class="small">No past events.</p>'}</div><div class="card"><h2>Manage Court Message Presets</h2><p class="small">Save messages once and reuse them from the Court Reservation Message dropdown.</p>${state.messagePresets.length?state.messagePresets.map(p=>`<div class="person"><div><b>${esc(p.name||'Saved message')}</b><div class="small presetPreview">${esc(p.message||'')}</div></div><span><button class="secondary" onclick="editMessagePreset('${p.id}')">Edit</button> <button class="danger" onclick="deleteMessagePreset('${p.id}')">Delete</button></span></div>`).join(''):'<p class="small">No custom presets yet. Built-in presets are already available in the dropdown.</p>'}<label>Preset Name</label><input id="presetName" placeholder="Example: Waiting for 8 players"><label>Message</label><textarea id="presetMessage" placeholder="Type the reusable message..."></textarea><button style="margin-top:12px" onclick="saveMessagePreset()">Save Message Preset</button></div><div class="card"><h2>Publish Notification</h2><p class="small">Send an in-app message to all players. This is free and saved in Firebase.</p><label>Title</label><input id="manualNotifTitle" placeholder="Example: DinkHouse update"><label>Message</label><textarea id="manualNotifMessage" placeholder="Type your update here..."></textarea><label>Type</label><select id="manualNotifType"><option value="info">Info</option><option value="event">New Event</option><option value="booked">Booked</option><option value="full">Fully Booked</option><option value="renovation">Closed for Renovation</option><option value="closedEvent">Closed for Event</option><option value="cancelled">Cancelled</option></select><button style="margin-top:12px" onclick="publishManualNotification()">Publish Notification</button></div><div class="card"><h2>Manage Locations</h2>${state.locations.map(l=>`<div class="person"><b>${esc(l.name||l.location||l.title||l.id)}</b><span><button class="secondary" onclick="renameLocation('${l.id}')">Edit</button> <button class="danger" onclick="deleteLocation('${l.id}')">Delete</button></span></div>`).join('')||'<p class="small">No locations yet.</p>'}<div class="row"><input id="newLocation" placeholder="New location"><button onclick="addLocation()">Add Location</button></div></div>`;
 }
 function eventCardCoord(ev,isPast=false){
  const c=eventCounts(ev);
@@ -332,8 +376,8 @@ window.publishManualNotification=async()=>{
   renderCoordinator();
 };
 
-window.saveEvent=async()=>{ const id=$('#editId').value; const data={date:$('#date').value,start:$('#start').value,end:$('#end').value,location:$('#location').value,cutoff:$('#cutoff').value,max:$('#max').value,booked:$('#booked').checked,closed:$('#closed').checked,closedEvent:$('#closedEvent').checked,cancelled:$('#cancelled').checked,full:$('#full').checked,details:$('#details').value,feeOn:$('#feeOn').checked,fee:$('#fee').value,payment:$('#payment').value}; if(!data.date||!data.start||!data.end||!data.location)return alert('Complete date, time, and location.'); if(id){ const oldEv=state.events.find(e=>e.id===id); await updateDoc(doc(db,'events',id),data); const n=statusNotificationData(oldEv,data,false); if(n) await createNotification(n); } else { const ref=await addDoc(collection(db,'events'),{...data,signups:[],createdAt:serverTimestamp()}); const n=statusNotificationData(null,data,true); if(n) await createNotification({...n,eventId:ref.id}); } clearEventForm(); };
-window.editEvent=(id)=>{ const e=state.events.find(x=>x.id===id); ['date','start','end','location','cutoff','max','details','fee','payment'].forEach(k=>{const el=$('#'+k); if(el) el.value=e[k]||''}); $('#editId').value=e.id; $('#booked').checked=!!e.booked; $('#closed').checked=!!e.closed; $('#closedEvent').checked=!!e.closedEvent; $('#cancelled').checked=!!e.cancelled; $('#full').checked=!!e.full; $('#feeOn').checked=!!e.feeOn; window.scrollTo({top:0,behavior:'smooth'}); };
+window.saveEvent=async()=>{ const id=$('#editId').value; const data={date:$('#date').value,start:$('#start').value,end:$('#end').value,location:$('#location').value,cutoff:$('#cutoff').value,max:$('#max').value,booked:$('#booked').checked,closed:$('#closed').checked,closedEvent:$('#closedEvent').checked,cancelled:$('#cancelled').checked,full:$('#full').checked,details:$('#details').value,reservationMessage:$('#reservationMessage').value.trim(),feeOn:$('#feeOn').checked,fee:$('#fee').value,payment:$('#payment').value}; if(!data.date||!data.start||!data.end||!data.location)return alert('Complete date, time, and location.'); if(id){ const oldEv=state.events.find(e=>e.id===id); await updateDoc(doc(db,'events',id),data); const n=statusNotificationData(oldEv,data,false); if(n) await createNotification(n); } else { const ref=await addDoc(collection(db,'events'),{...data,signups:[],createdAt:serverTimestamp()}); const n=statusNotificationData(null,data,true); if(n) await createNotification({...n,eventId:ref.id}); } clearEventForm(); };
+window.editEvent=(id)=>{ const e=state.events.find(x=>x.id===id); ['date','start','end','location','cutoff','max','details','reservationMessage','fee','payment'].forEach(k=>{const el=$('#'+k); if(el) el.value=e[k]||''}); $('#editId').value=e.id; $('#booked').checked=!!e.booked; $('#closed').checked=!!e.closed; $('#closedEvent').checked=!!e.closedEvent; $('#cancelled').checked=!!e.cancelled; $('#full').checked=!!e.full; $('#feeOn').checked=!!e.feeOn; if($('#reservationPreset')) $('#reservationPreset').innerHTML=reservationPresetOptions(e.reservationMessage||''); window.scrollTo({top:0,behavior:'smooth'}); };
 window.clearEventForm=()=>renderCoordinator();
 window.deleteEvent=async(id)=>{ if(confirm('Delete this event?')) await deleteDoc(doc(db,'events',id)); };
 window.removeSignup=async(eid,sid)=>{ const ev=state.events.find(e=>e.id===eid); await updateDoc(doc(db,'events',eid),{signups:(ev.signups||[]).filter(s=>s.id!==sid)}); };

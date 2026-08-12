@@ -684,3 +684,9 @@
   }
   .brandHero .notifBtn{width:43px;height:43px;min-width:43px;border-radius:14px;font-size:19px}
 }
+
+/* v2.7.4 — reusable court reservation message presets */
+#reservationPreset{margin-bottom:8px}
+#reservationMessage{min-height:105px}
+.presetPreview{margin-top:5px;white-space:pre-wrap;line-height:1.35;max-width:620px}
+@media(max-width:620px){.presetPreview{max-width:none}.card .person>span{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}}
