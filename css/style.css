@@ -743,3 +743,22 @@ body[data-site-spacing="compact"] .featuredMain{padding-top:30px;padding-bottom:
 .editorTabs button.editorTabActive{background:#172033;color:#fff}
 .editorMessagePreview{margin-top:12px;padding:14px;border:1px solid #ffe19a;background:#fff9e8;color:#6c5105;border-radius:15px;line-height:1.45}
 .versionChip{display:inline-block;vertical-align:middle;font-size:11px;padding:4px 7px;margin-left:6px;border-radius:999px;background:#eaf3ff;color:#2458a9;font-weight:900}
+
+/* v3.2 — Weebly-style drag & drop page builder */
+.dragBuilderWorkspace{display:grid;grid-template-columns:150px minmax(0,1fr);gap:12px;align-items:start;margin-top:14px}
+.blockLibrary{position:sticky;top:94px;display:grid;gap:7px;padding:10px;border:1px solid var(--line);border-radius:15px;background:#f7f9fc}
+.blockLibraryTitle{display:flex;justify-content:space-between;align-items:end;gap:5px;padding:2px 3px 7px;border-bottom:1px solid var(--line)}
+.blockLibraryTitle span{font-size:9px;color:var(--muted);text-transform:uppercase;font-weight:800}
+.builderPaletteItem{position:relative;display:grid;grid-template-columns:26px 1fr;grid-template-rows:auto auto;gap:0 7px;text-align:left;padding:9px;border:1px solid #dfe6ef;border-radius:11px;background:#fff;color:var(--ink);box-shadow:none;cursor:grab}
+.builderPaletteItem:active{cursor:grabbing}.builderPaletteItem>span{grid-row:1 / span 2;display:grid;place-items:center;width:26px;height:26px;border-radius:7px;background:color-mix(in srgb,var(--site-accent) 12%,#fff);color:var(--site-accent);font-weight:900}
+.builderPaletteItem b{font-size:11px}.builderPaletteItem small{font-size:9px;color:var(--muted);line-height:1.15}.builderPaletteItem em{position:absolute;right:6px;top:5px;font-size:7px;color:#9aa4b2;font-style:normal;text-transform:uppercase;letter-spacing:.05em}
+.builderPaletteItem:hover{border-color:color-mix(in srgb,var(--site-accent) 55%,#dfe6ef);transform:translateY(-1px)}
+.builderCanvas{min-width:0;padding:10px;border:1px solid var(--line);border-radius:16px;background:linear-gradient(180deg,#fff,#f7f9fc)}
+.builderCanvasHead{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:3px 3px 10px}.builderCanvasHead span{font-size:10px;color:var(--muted)}
+.builderSystemBlock{position:relative;border:1px dashed #c7d0dc;border-radius:12px;padding:10px 11px;margin:7px 0;background:#f6f8fa;color:#687386}.builderSystemBlock b,.builderSystemBlock small{display:block}.builderSystemBlock b{font-size:11px;color:#536071}.builderSystemBlock small{font-size:9px;margin-top:2px}.lockedBadge{position:absolute;right:8px;top:7px;font-size:7px;font-weight:900;letter-spacing:.05em;background:#e8edf3;color:#748093;border-radius:999px;padding:3px 5px}
+.siteBlockDropTarget{position:relative;border-radius:16px;padding:3px;transition:background .15s ease,box-shadow .15s ease}.siteBlockDropTarget.dragOver{background:color-mix(in srgb,var(--site-accent) 12%,transparent);box-shadow:inset 0 0 0 2px var(--site-accent)}
+.siteBlockEditor{cursor:grab;transition:opacity .15s ease,transform .15s ease,box-shadow .15s ease}.siteBlockEditor.dragging{opacity:.38;transform:scale(.985);box-shadow:none}.siteBlockEditor:active{cursor:grabbing}
+.dragHandle{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#edf2f7;color:#657085;letter-spacing:0;cursor:grab;font-size:17px;line-height:1}
+.builderDropEnd{display:grid;place-items:center;gap:2px;min-height:68px;margin-top:7px;border:2px dashed #c7d0dc;border-radius:14px;color:#748093;background:#fff;text-align:center}.builderDropEnd b{font-size:11px}.builderDropEnd span{font-size:9px}.builderDropEnd.dragOver{border-color:var(--site-accent);color:var(--site-accent);background:color-mix(in srgb,var(--site-accent) 7%,#fff)}
+@media(min-width:761px){.mobileMoveBtn{display:none}}
+@media(max-width:760px){.dragBuilderWorkspace{grid-template-columns:1fr}.blockLibrary{position:relative;top:auto;grid-template-columns:repeat(2,minmax(0,1fr))}.blockLibraryTitle{grid-column:1/-1}.builderPaletteItem{touch-action:manipulation}.siteBlockEditor{cursor:default}.dragHandle{cursor:default}.mobileMoveBtn{display:inline-block}}
