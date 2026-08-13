@@ -1,26 +1,42 @@
-PowerDink v3.7.7 public event viewing
+PowerDink v3.7.8 — Firestore rules needed for public event viewing + view analytics
 
-The app now opens the nearest upcoming event from the normal site URL even when the visitor is not logged in.
-For that to work WITHOUT Anonymous Authentication, Firestore must allow unauthenticated READ access to:
+Paste these in Firebase Console > Firestore Database > Rules, then Publish.
 
-  /events/{eventId}
-  /siteSettings/published
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
 
-Keep CREATE/UPDATE/DELETE protected by your existing authenticated/coordinator rules.
+    // Guests can view events. Logged-in users can update events for the current signup system.
+    match /events/{eventId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
 
-MERGE these read permissions into your existing firestore.rules; do NOT replace your whole rules file blindly:
+    // Guests can read the published appearance/content only.
+    match /siteSettings/{document=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
 
-match /events/{eventId} {
-  allow read: if true;
-  // Keep your EXISTING write rule(s) here.
+    // Guests may only CREATE anonymous view records. They cannot read/update/delete them.
+    match /publicViews/{viewId} {
+      allow create: if request.resource.data.keys().hasOnly(['eventId','visitorId','path','source','createdAt'])
+                    && request.resource.data.eventId is string
+                    && request.resource.data.visitorId is string
+                    && request.resource.data.path is string
+                    && request.resource.data.source is string;
+      allow read: if request.auth != null;
+      allow update, delete: if false;
+    }
+
+    // Everything else remains account-only, matching the app's existing security model.
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
 }
 
-match /siteSettings/{docId} {
-  allow read: if docId == 'published';
-  // Keep your EXISTING write rule(s) here.
-}
-
-IMPORTANT:
-- Public visitors can see event fields stored in the event document. Do not store secrets in event documents.
-- Signup buttons still route visitors to Login / Create Account.
-- Player account/profile data should remain private under your existing rules.
+Notes:
+- Public views store only a random browser visitor ID, event ID, source (direct/facebook), page path, and timestamp.
+- No guest name/email is collected for views.
+- The dashboard starts collecting NEW activity after v3.7.8 is deployed; it cannot reconstruct old guest views that were never logged.
