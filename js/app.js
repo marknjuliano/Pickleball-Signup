@@ -1,4 +1,4 @@
-console.log('Pickleball Signup v3.6 Site Settings Backup loaded');
+console.log('Pickleball Signup v3.7.4 Per-Tab Builder loaded');
 import { auth, db } from './firebase.js';
 import {
   createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut,
@@ -75,7 +75,7 @@ const DEFAULT_SITE_SETTINGS = {
 };
 const SITE_SETTINGS_EXPORT_FORMAT='powerdink-site-settings';
 const SITE_SETTINGS_SCHEMA_VERSION=2;
-const APP_BUILD_VERSION='3.7.3';
+const APP_BUILD_VERSION='3.7.4';
 const SITE_SETTINGS_KEYS=Object.keys(DEFAULT_SITE_SETTINGS);
 function cleanSiteSettingsForBackup(source={}){
   const clean={};
@@ -640,7 +640,7 @@ function renderCalendar(){
    const c=eventCounts(e);
    return `<div class="calendarEvent"><div><b>${esc(e.location)}</b><div class="small">${timeLabel(e.start)} - ${timeLabel(e.end)}</div></div><div>${statusBadges(e)}<div class="small">${c.playing} playing • ${c.interested} interested</div></div></div>`;
  }).join(''):'<p class="small">No event scheduled for this date.</p>';
- { const cfg=siteSettings(); $('#main').innerHTML=`${navigationIntro('calendar')}${renderCustomBlocks(cfg,false,'beforeSystem','calendar')}<div class="card calendarCard"><div class="calendarHeader"><button class="secondary" onclick="changeCalendarMonth(-1)">‹</button><h2>${monthLabel}</h2><button class="secondary" onclick="changeCalendarMonth(1)">›</button></div><div class="calendarWeekdays">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div>${d}</div>`).join('')}</div><div class="calendarGrid">${cells.join('')}</div><div class="calendarSelected"><h3>${fmtDate(state.selectedCalendarDate)}</h3>${details}</div></div>`;
+ const cfg=siteSettings(); $('#main').innerHTML=`${navigationIntro('calendar')}${renderCustomBlocks(cfg,false,'beforeSystem','calendar')}<div class="card calendarCard"><div class="calendarHeader"><button class="secondary" onclick="changeCalendarMonth(-1)">‹</button><h2>${monthLabel}</h2><button class="secondary" onclick="changeCalendarMonth(1)">›</button></div><div class="calendarWeekdays">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div>${d}</div>`).join('')}</div><div class="calendarGrid">${cells.join('')}</div><div class="calendarSelected"><h3>${fmtDate(state.selectedCalendarDate)}</h3>${details}</div></div>`;
 }
 window.selectCalendarDate=(date)=>{state.selectedCalendarDate=date; renderCalendar();};
 window.changeCalendarMonth=(delta)=>{

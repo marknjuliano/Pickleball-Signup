@@ -1,7 +1,7 @@
 (async () => {
   const app = document.getElementById('app');
   try {
-    await import('./app.js?v=3.7.3');
+    await import('./app.js?v=3.7.4');
   } catch (err) {
     console.error('PowerDink bootstrap failed:', err);
     if (app) {
