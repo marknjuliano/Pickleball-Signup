@@ -17,3 +17,9 @@ Built directly from the working v3.1.2 Runtime Fix.
 
 ## Deploy
 Upload the CONTENTS of this folder to the repository root and replace the existing files.
+
+## v3.4 Direct-on-Page Builder
+- Drag elements directly onto the real Player Page preview.
+- Drop zones are available above the featured event, around the waiting message, coordinator details, signup area, players list, and below the featured event.
+- Existing placed blocks can be dragged again to move them to a different drop zone.
+- Existing v3.2 blocks automatically remain in the area below the Upcoming Events heading.
