@@ -829,3 +829,31 @@ body[data-site-spacing="compact"] .featuredMain{padding-top:30px;padding-bottom:
 .previewCalendarMock{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}.previewCalendarMock>*{padding:6px 2px;text-align:center;border-radius:6px;background:#f4f7fa;font-size:10px}.previewCalendarMock b{background:#eaf0f5}
 .previewStats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px}.previewStats b{padding:12px 5px;text-align:center;background:#f4f7fa;border-radius:9px;font-size:11px}
 .customPagePlaceholder{border-style:dashed;text-align:center;color:#7a8798}
+
+
+/* v3.7.5 — full-browser Site Editor workspace */
+.wrap.siteEditorFullWidth{
+  width:100%;
+  max-width:none;
+  padding:12px 14px 32px;
+}
+.wrap.siteEditorFullWidth .siteEditorShell{
+  width:100%;
+  max-width:none;
+  margin:0;
+}
+.wrap.siteEditorFullWidth .siteEditorGrid{
+  grid-template-columns:minmax(360px,460px) minmax(0,1fr);
+  gap:16px;
+}
+.wrap.siteEditorFullWidth .previewPanel{
+  width:100%;
+}
+.wrap.siteEditorFullWidth .sitePreviewFrame[data-mode="desktop"] #siteEditorPreview{
+  width:100%;
+  max-width:none;
+}
+@media(max-width:1050px){
+  .wrap.siteEditorFullWidth{padding:10px 10px 28px}
+  .wrap.siteEditorFullWidth .siteEditorGrid{grid-template-columns:1fr}
+}
