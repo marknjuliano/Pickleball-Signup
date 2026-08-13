@@ -1,0 +1,26 @@
+PowerDink v3.7.7 public event viewing
+
+The app now opens the nearest upcoming event from the normal site URL even when the visitor is not logged in.
+For that to work WITHOUT Anonymous Authentication, Firestore must allow unauthenticated READ access to:
+
+  /events/{eventId}
+  /siteSettings/published
+
+Keep CREATE/UPDATE/DELETE protected by your existing authenticated/coordinator rules.
+
+MERGE these read permissions into your existing firestore.rules; do NOT replace your whole rules file blindly:
+
+match /events/{eventId} {
+  allow read: if true;
+  // Keep your EXISTING write rule(s) here.
+}
+
+match /siteSettings/{docId} {
+  allow read: if docId == 'published';
+  // Keep your EXISTING write rule(s) here.
+}
+
+IMPORTANT:
+- Public visitors can see event fields stored in the event document. Do not store secrets in event documents.
+- Signup buttons still route visitors to Login / Create Account.
+- Player account/profile data should remain private under your existing rules.

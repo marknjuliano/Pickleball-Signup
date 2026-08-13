@@ -12,3 +12,10 @@ Added shareable public event links. Guests can view a linked event without creat
 
 ### Firebase requirement for public event links
 This build uses Firebase Anonymous Authentication for view-only event guests so existing authenticated-read Firestore rules can remain protected. In Firebase Console, enable **Authentication → Sign-in method → Anonymous**. Guest sessions only render the linked event and do not expose coordinator controls. Signup still requires a regular username/password account.
+
+## v3.7.7 Public landing view
+- The normal base URL (including links that only add tracking parameters such as `fbclid`) opens the nearest upcoming event for guests.
+- `?event=<eventId>` still opens that exact event.
+- Guests are sent to Login / Create Account only when they try to sign up.
+- This version no longer depends on Firebase Anonymous Authentication for guest viewing.
+- Firestore must allow public read access to event documents and `siteSettings/published`; see `FIRESTORE-PUBLIC-EVENT-RULES.txt`.

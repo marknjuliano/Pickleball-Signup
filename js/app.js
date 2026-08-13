@@ -1,4 +1,4 @@
-console.log('Pickleball Signup v3.7.6 Public Event Links loaded');
+console.log('Pickleball Signup v3.7.7 Public Landing Event View loaded');
 import { auth, db } from './firebase.js';
 import {
   createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut,
@@ -88,10 +88,10 @@ function cleanSiteSettingsForBackup(source={}){
   return clean;
 }
 function siteSettings(){ return {...DEFAULT_SITE_SETTINGS,...(state.siteSettings||{})}; }
-let state = { user:null, profile:null, events:[], locations:[], notifications:[], showNotifications:false, view:localStorage.getItem('pickleballView')||'player', ready:false, calendarMonth:today().slice(0,7), selectedCalendarDate:today(), siteSettings:{...DEFAULT_SITE_SETTINGS}, editorDraft:null, editorPreviewMode:'desktop', editorTab:'branding', editorSelectedNav:'player' };
+let state = { user:null, profile:null, events:[], locations:[], notifications:[], showNotifications:false, publicGuest:false, view:localStorage.getItem('pickleballView')||'player', ready:false, calendarMonth:today().slice(0,7), selectedCalendarDate:today(), siteSettings:{...DEFAULT_SITE_SETTINGS}, editorDraft:null, editorPreviewMode:'desktop', editorTab:'branding', editorSelectedNav:'player' };
 let unsubscribers = [];
 function requestedEventId(){ return new URLSearchParams(location.search).get('event') || ''; }
-function isGuestUser(){ return !!state.user?.isAnonymous; }
+function isGuestUser(){ return !!state.publicGuest || !!state.user?.isAnonymous; }
 function publicEventUrl(eventId){ const u=new URL(location.href); u.search=''; u.hash=''; u.searchParams.set('event',eventId); return u.toString(); }
 
 
@@ -154,32 +154,51 @@ window.nav = nav;
 if(typeof state.view!=='string' || !state.view.trim()) state.view='player';
 
 onAuthStateChanged(auth, async user => {
-  cleanup(); state.user=user; state.profile=null; state.events=[]; state.locations=[]; state.notifications=[]; state.showNotifications=false; state.ready=false;
+  cleanup(); state.user=user; state.profile=null; state.events=[]; state.locations=[]; state.notifications=[]; state.showNotifications=false; state.ready=false; state.publicGuest=false;
   const eventId=requestedEventId();
+  const forceAuth=sessionStorage.getItem('powerDinkForceAuth')==='1';
   if(!user){
-    if(eventId && sessionStorage.getItem('powerDinkForceAuth')!=='1'){
-      try{ await signInAnonymously(auth); return; }
-      catch(err){ console.error('Guest access failed',err); renderLogin('This event can be viewed after signing in.'); return; }
+    if(!forceAuth){
+      // Public landing mode: the normal shared/base URL opens the event view first.
+      // Extra query parameters such as fbclid are ignored; ?event=<id> still opens a specific event.
+      state.publicGuest=true;
+      startGuestListeners(eventId);
+      return;
     }
-    renderLogin(eventId ? 'Sign in or create a username to join this event.' : '');
+    renderLogin('Sign in or create a username to join this event.');
     return;
   }
-  if(user.isAnonymous){ startGuestListeners(eventId); return; }
+  if(user.isAnonymous){ state.publicGuest=true; startGuestListeners(eventId); return; }
   sessionStorage.removeItem('powerDinkForceAuth');
   await ensureProfile(user);
   startListeners();
 });
 
 function startGuestListeners(eventId){
-  if(!eventId){ signOut(auth); return; }
-  unsubscribers.push(onSnapshot(doc(db,'events',eventId), snap=>{
-    state.events=snap.exists()?[{id:snap.id,...snap.data(),signups:Array.isArray(snap.data().signups)?snap.data().signups:[]}]:[];
-    state.ready=true; render();
-  }, err=>renderError(err)));
+  const handlePublicReadError=(err)=>{
+    console.error('Public event read failed',err);
+    state.ready=true;
+    appEl.innerHTML=`<div class="wrap"><div class="card"><h2>Public event view needs permission</h2><div class="error">${esc(friendlyFirebaseError(err))}</div><p class="small">The app is ready for guest viewing, but Firestore must allow public read access to events and the published site settings. Signing up and all edits still require an account.</p><button onclick="guestOpenAuth()">Login / Create Account</button></div></div>`;
+  };
+  if(eventId){
+    unsubscribers.push(onSnapshot(doc(db,'events',eventId), snap=>{
+      state.events=snap.exists()?[{id:snap.id,...snap.data(),signups:Array.isArray(snap.data().signups)?snap.data().signups:[]}]:[];
+      state.ready=true; render();
+    }, handlePublicReadError));
+  }else{
+    const publicQ=query(collection(db,'events'), orderBy('date'));
+    unsubscribers.push(onSnapshot(publicQ, snap=>{
+      const all=snap.docs.map(d=>({id:d.id,...d.data(),signups:Array.isArray(d.data().signups)?d.data().signups:[]}));
+      const upcoming=all.filter(e=>e.date && new Date(e.date+'T23:59:59').getTime()>=Date.now())
+        .sort((a,b)=>String(a.date+a.start).localeCompare(String(b.date+b.start)));
+      state.events=upcoming.length?[upcoming[0]]:[];
+      state.ready=true; render();
+    }, handlePublicReadError));
+  }
   unsubscribers.push(onSnapshot(doc(db,'siteSettings','published'), snap=>{
     state.siteSettings=snap.exists()?{...DEFAULT_SITE_SETTINGS,...snap.data()}:{...DEFAULT_SITE_SETTINGS};
     applyPublishedTheme(); render();
-  }, err=>console.warn('Site settings unavailable',err)));
+  }, err=>console.warn('Published site settings are not publicly readable; using defaults.',err)));
 }
 
 async function ensureProfile(user){
@@ -212,9 +231,13 @@ function startListeners(){
 function renderError(err){ appEl.innerHTML=`<div class="wrap"><div class="card"><h2>Firebase Error</h2><div class="error">${esc(err.message)}</div><p class="small">Check Firebase config and Firestore rules.</p></div></div>`; }
 function render(){
   try{
+    if(isGuestUser()){
+      if(!state.ready) return appEl.innerHTML='<div class="wrap"><div class="card"><h2>Loading event...</h2><p class="small">Opening the next PowerDink play date…</p></div></div>';
+      return renderGuestEvent();
+    }
     if(!state.user) return renderLogin();
     if(!state.ready) return appEl.innerHTML='<div class="wrap"><div class="card"><h2>Loading...</h2><p class="small">Connecting to PowerDink…</p></div></div>';
-    if(isGuestUser()) renderGuestEvent(); else renderApp();
+    renderApp();
   }catch(err){
     console.error('Render failed',err);
     // A saved editor/custom-page route should never prevent the app from opening.
@@ -585,7 +608,7 @@ function renderSiteEditor(){
   const labelsSection=`<div class="editorSection"><h3>Waiting / Booking Message</h3><p class="small">Use <b>{min}</b> anywhere in the message and it will automatically show your minimum player count.</p><label>Waiting Title</label><input value="${esc(cfg.waitingTitle)}" oninput="updateSiteDraft('waitingTitle',this.value)"><label>Waiting Message</label><textarea oninput="updateSiteDraft('waitingMessage',this.value)">${esc(cfg.waitingMessage)}</textarea><label>Minimum players before booking</label><input type="number" min="1" max="99" value="${minimumPlayers(cfg)}" oninput="updateSiteDraft('minimumPlayers',Math.max(1,Math.min(99,Number(this.value)||1)))"><div class="editorMessagePreview"><b>${esc(cfg.waitingTitle)}</b><br>${esc(waitingMessageText(cfg))}</div></div><div class="editorSection"><h3>Button & Section Labels</h3><label>Next Play Date Label</label><input value="${esc(cfg.nextPlayLabel)}" oninput="updateSiteDraft('nextPlayLabel',this.value)"><label>All Next Events Heading</label><input value="${esc(cfg.allNextHeading)}" oninput="updateSiteDraft('allNextHeading',this.value)"><label>Signup Heading</label><input value="${esc(cfg.signupHeading)}" oninput="updateSiteDraft('signupHeading',this.value)"><div class="editorTwoCol"><div><label>Interested</label><input value="${esc(cfg.interestedLabel)}" oninput="updateSiteDraft('interestedLabel',this.value)"></div><div><label>Playing</label><input value="${esc(cfg.playingLabel)}" oninput="updateSiteDraft('playingLabel',this.value)"></div></div><label>Expand Label</label><input value="${esc(cfg.expandLabel)}" oninput="updateSiteDraft('expandLabel',this.value)"></div>`;
   const backupSection=`<div class="editorSection backupSection"><h3>Site Settings Backup</h3><p class="small">Export a portable backup of your Site Editor changes. Use it with a future PowerDink version to restore your branding, navigation, page content, labels, per-tab layouts, and custom blocks.</p><div class="backupActionCard"><div><b>Export Site Settings</b><p class="small">Downloads the CURRENT editor settings as a versioned JSON backup file. It does not include player accounts, events, signups, notifications, or other live database records.</p></div><button onclick="exportSiteSettings()">Export Settings</button></div><div class="backupActionCard"><div><b>Import Site Settings</b><p class="small">Loads a PowerDink Site Settings backup into the CURRENT EDITOR DRAFT. Review it in Live Preview before publishing.</p></div><button class="secondary" onclick="chooseSiteSettingsImport()">Import Settings</button><input id="siteSettingsImportFile" type="file" accept="application/json,.json" hidden onchange="importSiteSettingsFile(this)"></div><div class="backupSafetyNote"><b>Safe update workflow</b><p class="small">Before installing a future app version: Export Site Settings → keep the JSON file → install the new version → Import Site Settings → review → Publish Changes.</p></div></div>`;
   const activeSection=tab==='builder'?builderSection:tab==='navigation'?navigationSection:tab==='labels'?labelsSection:tab==='backup'?backupSection:brandingSection;
-  $('#main').innerHTML=`<section class="siteEditorShell"><div class="siteEditorToolbar"><div><h2>Visual Site Editor <span class="versionChip">v3.7.5</span></h2><p>Edit, preview, save as draft, then publish when ready.</p></div><div class="editorToolbarActions"><button class="secondary" onclick="saveSiteDraft()">Save Draft</button><button class="secondary" onclick="discardSiteChanges()">Discard</button><button class="secondary" onclick="resetSiteDraft()">Reset</button><button class="publishBtn" onclick="publishSiteChanges()">Publish Changes</button></div></div><div class="siteEditorGrid"><div class="editorPanel"><div class="editorTabs"><button class="${tab==='branding'?'editorTabActive':''}" onclick="setEditorTab('branding')">Branding</button><button class="${tab==='builder'?'editorTabActive':''}" onclick="setEditorTab('builder')">Page Builder</button><button class="${tab==='navigation'?'editorTabActive':''}" onclick="setEditorTab('navigation')">Navigation</button><button class="${tab==='labels'?'editorTabActive':''}" onclick="setEditorTab('labels')">Labels</button><button class="${tab==='backup'?'editorTabActive':''}" onclick="setEditorTab('backup')">Backup</button></div>${activeSection}</div><div class="previewPanel"><div class="previewPanelHead"><div><b>Live Preview</b><span>Draft only — not live yet</span></div><div><button data-mode="desktop" class="previewModeBtn ${state.editorPreviewMode==='desktop'?'active':''}" onclick="setEditorPreviewMode('desktop')">Desktop</button><button data-mode="mobile" class="previewModeBtn ${state.editorPreviewMode==='mobile'?'active':''}" onclick="setEditorPreviewMode('mobile')">Mobile</button></div></div><div class="sitePreviewFrame" data-mode="${state.editorPreviewMode}"><div id="siteEditorPreview"></div></div></div></div></section>`;
+  $('#main').innerHTML=`<section class="siteEditorShell"><div class="siteEditorToolbar"><div><h2>Visual Site Editor <span class="versionChip">v3.7.7</span></h2><p>Edit, preview, save as draft, then publish when ready.</p></div><div class="editorToolbarActions"><button class="secondary" onclick="saveSiteDraft()">Save Draft</button><button class="secondary" onclick="discardSiteChanges()">Discard</button><button class="secondary" onclick="resetSiteDraft()">Reset</button><button class="publishBtn" onclick="publishSiteChanges()">Publish Changes</button></div></div><div class="siteEditorGrid"><div class="editorPanel"><div class="editorTabs"><button class="${tab==='branding'?'editorTabActive':''}" onclick="setEditorTab('branding')">Branding</button><button class="${tab==='builder'?'editorTabActive':''}" onclick="setEditorTab('builder')">Page Builder</button><button class="${tab==='navigation'?'editorTabActive':''}" onclick="setEditorTab('navigation')">Navigation</button><button class="${tab==='labels'?'editorTabActive':''}" onclick="setEditorTab('labels')">Labels</button><button class="${tab==='backup'?'editorTabActive':''}" onclick="setEditorTab('backup')">Backup</button></div>${activeSection}</div><div class="previewPanel"><div class="previewPanelHead"><div><b>Live Preview</b><span>Draft only — not live yet</span></div><div><button data-mode="desktop" class="previewModeBtn ${state.editorPreviewMode==='desktop'?'active':''}" onclick="setEditorPreviewMode('desktop')">Desktop</button><button data-mode="mobile" class="previewModeBtn ${state.editorPreviewMode==='mobile'?'active':''}" onclick="setEditorPreviewMode('mobile')">Mobile</button></div></div><div class="sitePreviewFrame" data-mode="${state.editorPreviewMode}"><div id="siteEditorPreview"></div></div></div></div></section>`;
   renderSiteEditorPreview();
 }
 
@@ -600,7 +623,7 @@ function renderGuestEvent(){
  appEl.innerHTML=`<div class="wrap"><div class="hero heroWithBell brandHero" style="background-image:linear-gradient(rgba(0,0,0,${Math.max(0,Math.min(90,Number(cfg.headerOverlay??48)))/100}),rgba(0,0,0,${Math.max(0,Math.min(90,Number(cfg.headerOverlay??48)))/100})),url('${esc(safeImageUrl(cfg.headerBackgroundUrl,DEFAULT_SITE_SETTINGS.headerBackgroundUrl))}')"><div class="brandLeft"><img src="${esc(safeImageUrl(cfg.logoUrl,DEFAULT_SITE_SETTINGS.logoUrl))}" class="powerDinkLogo" alt="PowerDink logo"><span class="brandDivider"></span><div class="brandTitle"><h1>${esc(cfg.appTitle)}</h1></div></div></div><div class="tabs publicEventTabs"><button class="tab active">Event</button><button class="tab" onclick="guestOpenAuth()">Login / Create Account</button></div><main><div class="sectionTitle"><h2>Event Details</h2><p class="small">You can view this event without an account. A username is required to sign up.</p></div><section class="featuredEvent"><div class="featuredDate"><span>${d.toLocaleDateString(undefined,{weekday:'short'})}</span><b>${d.toLocaleDateString(undefined,{month:'short'}).toUpperCase()}</b><strong>${d.toLocaleDateString(undefined,{day:'numeric'})}</strong><em>${d.getFullYear()}</em></div><div class="featuredMain"><div class="featuredTop"><div><h2>${esc(ev.location)}</h2><p>📍 ${esc(ev.location)}<br>🕒 ${timeLabel(ev.start)} - ${timeLabel(ev.end)}</p></div><div class="featuredBadges">${c.playing>=minimumPlayers(cfg)?`<span class="badge red">${minimumPlayers(cfg)}+ Ready</span>`:''}${statusBadges(ev)}</div></div>${statusBox}${details}${ev.feeOn?`<div class="feeBox"><b>💵 Court Fee:</b> $${esc(ev.fee||'')}<br><b>Payment:</b> ${esc(ev.payment||'')}</div>`:''}<h3>${esc(cfg.signupHeading)}</h3><div class="guestSignupBox"><p><b>Want to join?</b><br>Create a username or sign in first. You will return to this same event after login.</p><div class="actions"><button class="secondary" onclick="guestOpenAuth()">${esc(cfg.interestedLabel)}</button><button class="success" onclick="guestOpenAuth()">${esc(cfg.playingLabel)}</button></div></div>${playerList}<div style="margin-top:16px"><button class="secondary" onclick="copyEventLink('${idSafe(ev.id)}')">Copy Event Link</button></div></div></section></main></div>`;
  applyPublishedTheme();
 }
-window.guestOpenAuth=async()=>{ sessionStorage.setItem('powerDinkForceAuth','1'); try{ await signOut(auth); }catch(e){ renderLogin('Sign in or create a username to join this event.'); } };
+window.guestOpenAuth=async()=>{ const ev=state.events[0]; if(ev?.id) sessionStorage.setItem('powerDinkReturnEvent',ev.id); sessionStorage.setItem('powerDinkForceAuth','1'); state.publicGuest=false; if(state.user?.isAnonymous){ try{ await signOut(auth); return; }catch(e){} } renderLogin('Sign in or create a username to join this event.'); };
 window.copyEventLink=async(eventId)=>{ const link=publicEventUrl(eventId); try{ await navigator.clipboard.writeText(link); alert('Event link copied.'); }catch(e){ prompt('Copy this event link:',link); } };
 
 function renderApp(){
