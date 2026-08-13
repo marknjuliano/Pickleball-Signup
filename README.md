@@ -1,3 +1,11 @@
+Pickleball Signup v3.7.1 - Per-Tab Visual Builder Hotfix
+
+Hotfixes:
+- Fixed a JavaScript typo that could break block insertion.
+- Explicitly initializes the selected editor tab/page.
+- Updated asset cache-busting version so browsers do not keep stale v3.2 JS/CSS.
+- Added a visible load-error fallback instead of a blank page.
+
 # PowerDink Pickleball Signup v3.6
 
 Built directly from the corrected v3.5.1 / v3.4 direct-page-drop branch.

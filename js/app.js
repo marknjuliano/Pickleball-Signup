@@ -11,6 +11,8 @@ import {
 
 const $ = sel => document.querySelector(sel);
 const appEl = $('#app');
+window.addEventListener('error', e=>{ console.error(e.error||e.message); if(appEl && !appEl.innerHTML.trim()) appEl.innerHTML='<div class="wrap"><div class="card"><h2>App failed to load</h2><p class="small">'+String(e.message||'Unknown error').replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]))+'</p></div></div>'; });
+window.addEventListener('unhandledrejection', e=>{ console.error(e.reason); });
 const DEFAULT_LOCATIONS = ['DinkHouse','Liberty Park','Cerritos Courts'];
 const today = () => new Date().toISOString().slice(0,10);
 const USERNAME_DOMAIN = 'users.powerdink.app';
@@ -71,7 +73,7 @@ const DEFAULT_SITE_SETTINGS = {
 };
 const SITE_SETTINGS_EXPORT_FORMAT='powerdink-site-settings';
 const SITE_SETTINGS_SCHEMA_VERSION=2;
-const APP_BUILD_VERSION='3.7';
+const APP_BUILD_VERSION='3.7.1';
 const SITE_SETTINGS_KEYS=Object.keys(DEFAULT_SITE_SETTINGS);
 function cleanSiteSettingsForBackup(source={}){
   const clean={};
@@ -84,7 +86,7 @@ function cleanSiteSettingsForBackup(source={}){
   return clean;
 }
 function siteSettings(){ return {...DEFAULT_SITE_SETTINGS,...(state.siteSettings||{})}; }
-let state = { user:null, profile:null, events:[], locations:[], notifications:[], showNotifications:false, view:localStorage.getItem('pickleballView')||'player', ready:false, calendarMonth:today().slice(0,7), selectedCalendarDate:today(), siteSettings:{...DEFAULT_SITE_SETTINGS}, editorDraft:null, editorPreviewMode:'desktop', editorTab:'branding' };
+let state = { user:null, profile:null, events:[], locations:[], notifications:[], showNotifications:false, view:localStorage.getItem('pickleballView')||'player', ready:false, calendarMonth:today().slice(0,7), selectedCalendarDate:today(), siteSettings:{...DEFAULT_SITE_SETTINGS}, editorDraft:null, editorPreviewMode:'desktop', editorTab:'branding', editorSelectedNav:'player' };
 let unsubscribers = [];
 
 
@@ -308,7 +310,7 @@ window.addSiteBlock=(type,index=null,slot='afterHeading')=>{
   blocks.splice(at,0,block);
   state.editorDraft.customBlocks=[...all.filter(b=>b.page!==page),...blocks];
   renderSiteEditor();
-  requestAnimation(()=>document.querySelector(`[data-site-block-id="${block.id}"]`)?.scrollIntoView({behavior:'smooth',block:'center'}));
+  requestAnimationFrame(()=>document.querySelector(`[data-site-block-id="${block.id}"]`)?.scrollIntoView({behavior:'smooth',block:'center'}));
 };
 window.removeSiteBlock=(id)=>{ if(!confirm('Delete this block?'))return; state.editorDraft.customBlocks=normalizeBlocks(editorSettings().customBlocks).filter(b=>b.id!==id); renderSiteEditor(); };
 window.moveSiteBlock=(id,delta)=>{ const all=normalizeBlocks(editorSettings().customBlocks).slice(), target=all.find(b=>b.id===id); if(!target)return; const ids=all.filter(b=>b.page===target.page).map(b=>b.id), pi=ids.indexOf(id), pj=pi+delta; if(pj<0||pj>=ids.length)return; const a=all.findIndex(b=>b.id===ids[pi]), z=all.findIndex(b=>b.id===ids[pj]); [all[a],all[z]]=[all[z],all[a]]; state.editorDraft.customBlocks=all; renderSiteEditor(); };
