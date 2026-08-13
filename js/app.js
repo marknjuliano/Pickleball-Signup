@@ -1,8 +1,8 @@
-console.log('Pickleball Signup v3.7.4 Per-Tab Builder loaded');
+console.log('Pickleball Signup v3.7.6 Public Event Links loaded');
 import { auth, db } from './firebase.js';
 import {
   createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut,
-  sendPasswordResetEmail, onAuthStateChanged, updatePassword
+  sendPasswordResetEmail, onAuthStateChanged, updatePassword, signInAnonymously
 } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
 import {
   collection, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc,
@@ -75,7 +75,7 @@ const DEFAULT_SITE_SETTINGS = {
 };
 const SITE_SETTINGS_EXPORT_FORMAT='powerdink-site-settings';
 const SITE_SETTINGS_SCHEMA_VERSION=2;
-const APP_BUILD_VERSION='3.7.4';
+const APP_BUILD_VERSION='3.7.6';
 const SITE_SETTINGS_KEYS=Object.keys(DEFAULT_SITE_SETTINGS);
 function cleanSiteSettingsForBackup(source={}){
   const clean={};
@@ -90,6 +90,9 @@ function cleanSiteSettingsForBackup(source={}){
 function siteSettings(){ return {...DEFAULT_SITE_SETTINGS,...(state.siteSettings||{})}; }
 let state = { user:null, profile:null, events:[], locations:[], notifications:[], showNotifications:false, view:localStorage.getItem('pickleballView')||'player', ready:false, calendarMonth:today().slice(0,7), selectedCalendarDate:today(), siteSettings:{...DEFAULT_SITE_SETTINGS}, editorDraft:null, editorPreviewMode:'desktop', editorTab:'branding', editorSelectedNav:'player' };
 let unsubscribers = [];
+function requestedEventId(){ return new URLSearchParams(location.search).get('event') || ''; }
+function isGuestUser(){ return !!state.user?.isAnonymous; }
+function publicEventUrl(eventId){ const u=new URL(location.href); u.search=''; u.hash=''; u.searchParams.set('event',eventId); return u.toString(); }
 
 
 function friendlyFirebaseError(error){
@@ -152,10 +155,32 @@ if(typeof state.view!=='string' || !state.view.trim()) state.view='player';
 
 onAuthStateChanged(auth, async user => {
   cleanup(); state.user=user; state.profile=null; state.events=[]; state.locations=[]; state.notifications=[]; state.showNotifications=false; state.ready=false;
-  if(!user){ renderLogin(); return; }
+  const eventId=requestedEventId();
+  if(!user){
+    if(eventId && sessionStorage.getItem('powerDinkForceAuth')!=='1'){
+      try{ await signInAnonymously(auth); return; }
+      catch(err){ console.error('Guest access failed',err); renderLogin('This event can be viewed after signing in.'); return; }
+    }
+    renderLogin(eventId ? 'Sign in or create a username to join this event.' : '');
+    return;
+  }
+  if(user.isAnonymous){ startGuestListeners(eventId); return; }
+  sessionStorage.removeItem('powerDinkForceAuth');
   await ensureProfile(user);
   startListeners();
 });
+
+function startGuestListeners(eventId){
+  if(!eventId){ signOut(auth); return; }
+  unsubscribers.push(onSnapshot(doc(db,'events',eventId), snap=>{
+    state.events=snap.exists()?[{id:snap.id,...snap.data(),signups:Array.isArray(snap.data().signups)?snap.data().signups:[]}]:[];
+    state.ready=true; render();
+  }, err=>renderError(err)));
+  unsubscribers.push(onSnapshot(doc(db,'siteSettings','published'), snap=>{
+    state.siteSettings=snap.exists()?{...DEFAULT_SITE_SETTINGS,...snap.data()}:{...DEFAULT_SITE_SETTINGS};
+    applyPublishedTheme(); render();
+  }, err=>console.warn('Site settings unavailable',err)));
+}
 
 async function ensureProfile(user){
   const ref=doc(db,'users',user.uid); let snap=await getDoc(ref);
@@ -189,7 +214,7 @@ function render(){
   try{
     if(!state.user) return renderLogin();
     if(!state.ready) return appEl.innerHTML='<div class="wrap"><div class="card"><h2>Loading...</h2><p class="small">Connecting to PowerDink…</p></div></div>';
-    renderApp();
+    if(isGuestUser()) renderGuestEvent(); else renderApp();
   }catch(err){
     console.error('Render failed',err);
     // A saved editor/custom-page route should never prevent the app from opening.
@@ -201,8 +226,8 @@ function render(){
     appEl.innerHTML='<div class="wrap"><div class="card"><h2>PowerDink could not finish loading</h2><p class="small">Your data is safe. Reload once. If this message remains, send a screenshot of this box.</p><div class="error">'+esc(err?.message||String(err))+'</div><button onclick="location.reload()">Reload App</button></div></div>';
   }
 }
-function renderLogin(){
-  appEl.innerHTML=`<div class="wrap login"><div><div class="hero brandHero loginBrandHero"><div class="brandLeft"><img src="images/powerdink-logo-v271.png?v=2.7.3" class="powerDinkLogo" alt="PowerDink logo"><span class="brandDivider"></span><div class="brandTitle"><h1>Pickleball Signup</h1></div></div></div><div class="card authCard"><div class="authTabs"><button id="loginTabBtn" class="authTab active" onclick="showAuthTab('login')">Login</button><button id="createTabBtn" class="authTab" onclick="showAuthTab('create')">Create Account</button></div><section id="loginPane"><h2>Welcome Back</h2><label>Username or Email</label><input id="loginId" type="text" autocomplete="username" placeholder="Username or email"><label>Password</label><div class="passwordBox"><input id="pass" type="password" autocomplete="current-password"><button class="secondary" onclick="togglePass('pass',this)">Show</button></div><button class="authPrimary" onclick="login()">Login</button><button class="ghost authLink" onclick="forgotPassword()">Forgot Password?</button></section><section id="createPane" class="hide"><h2>Create Your Account</h2><label>Username <span class="required">*</span></label><input id="newUsername" type="text" autocomplete="username" placeholder="your.username"><p class="small fieldHelp">Use 3–24 characters: letters, numbers, dot, underscore, or hyphen.</p><label>Display Name <span class="required">*</span></label><input id="displayName" type="text" autocomplete="name" placeholder="Your Name"><label>Recovery Email <span class="muted">(optional)</span></label><input id="recoveryEmail" type="email" autocomplete="email" placeholder="name@example.com"><p class="small fieldHelp">Add an email for self-service password reset. Without one, coordinator help is required.</p><label>Password <span class="required">*</span></label><div class="passwordBox"><input id="newPass" type="password" autocomplete="new-password"><button class="secondary" onclick="togglePass('newPass',this)">Show</button></div><button class="authPrimary" onclick="createAccount()">Create Account</button><p class="small">New accounts are active immediately after creation.</p></section></div></div></div>`;
+function renderLogin(message=''){
+  appEl.innerHTML=`<div class="wrap login"><div><div class="hero brandHero loginBrandHero"><div class="brandLeft"><img src="images/powerdink-logo-v271.png?v=2.7.3" class="powerDinkLogo" alt="PowerDink logo"><span class="brandDivider"></span><div class="brandTitle"><h1>Pickleball Signup</h1></div></div></div><div class="card authCard"><div class="authTabs"><button id="loginTabBtn" class="authTab active" onclick="showAuthTab('login')">Login</button><button id="createTabBtn" class="authTab" onclick="showAuthTab('create')">Create Account</button></div>${message?`<div class="notice info" style="margin-bottom:16px"><b>${esc(message)}</b></div>`:''}<section id="loginPane"><h2>Welcome Back</h2><label>Username or Email</label><input id="loginId" type="text" autocomplete="username" placeholder="Username or email"><label>Password</label><div class="passwordBox"><input id="pass" type="password" autocomplete="current-password"><button class="secondary" onclick="togglePass('pass',this)">Show</button></div><button class="authPrimary" onclick="login()">Login</button><button class="ghost authLink" onclick="forgotPassword()">Forgot Password?</button></section><section id="createPane" class="hide"><h2>Create Your Account</h2><label>Username <span class="required">*</span></label><input id="newUsername" type="text" autocomplete="username" placeholder="your.username"><p class="small fieldHelp">Use 3–24 characters: letters, numbers, dot, underscore, or hyphen.</p><label>Display Name <span class="required">*</span></label><input id="displayName" type="text" autocomplete="name" placeholder="Your Name"><label>Recovery Email <span class="muted">(optional)</span></label><input id="recoveryEmail" type="email" autocomplete="email" placeholder="name@example.com"><p class="small fieldHelp">Add an email for self-service password reset. Without one, coordinator help is required.</p><label>Password <span class="required">*</span></label><div class="passwordBox"><input id="newPass" type="password" autocomplete="new-password"><button class="secondary" onclick="togglePass('newPass',this)">Show</button></div><button class="authPrimary" onclick="createAccount()">Create Account</button><p class="small">New accounts are active immediately after creation.</p></section></div></div></div>`;
 }
 window.showAuthTab=(tab)=>{
   const login=tab==='login';
@@ -212,7 +237,7 @@ window.showAuthTab=(tab)=>{
   $('#createTabBtn')?.classList.toggle('active',!login);
 };
 window.togglePass=(id,btn)=>{const el=document.getElementById(id); el.type=el.type==='password'?'text':'password'; btn.textContent=el.type==='password'?'Show':'Hide';};
-window.login=async()=>{try{const id=$('#loginId').value.trim(); if(!id)return alert('Enter your username or email.'); const email=await resolveLoginEmail(id); await signInWithEmailAndPassword(auth,email,$('#pass').value);}catch(e){alert(friendlyFirebaseError(e));}};
+window.login=async()=>{try{const id=$('#loginId').value.trim(); if(!id)return alert('Enter your username or email.'); const email=await resolveLoginEmail(id); await signInWithEmailAndPassword(auth,email,$('#pass').value); sessionStorage.removeItem('powerDinkForceAuth');}catch(e){alert(friendlyFirebaseError(e));}};
 window.createAccount=async()=>{try{
   const raw=$('#newUsername').value.trim(); const username=normalizeUsername(raw); const displayName=$('#displayName').value.trim(); const recoveryEmail=$('#recoveryEmail').value.trim().toLowerCase(); const pass=$('#newPass').value;
   if(!/^[a-z0-9._-]{3,24}$/.test(raw.toLowerCase()) || username!==raw.toLowerCase()) return alert('Username must be 3–24 characters using only letters, numbers, dot, underscore, or hyphen.');
@@ -223,7 +248,7 @@ window.createAccount=async()=>{try{
   if(existing) return alert('That username is already taken. Please choose another.');
   const authEmail=recoveryEmail || usernameToEmail(username);
   sessionStorage.setItem('pendingPowerDinkAccount',JSON.stringify({username,displayName,recoveryEmail}));
-  await createUserWithEmailAndPassword(auth,authEmail,pass);
+  await createUserWithEmailAndPassword(auth,authEmail,pass); sessionStorage.removeItem('powerDinkForceAuth');
 }catch(e){sessionStorage.removeItem('pendingPowerDinkAccount'); alert(friendlyFirebaseError(e));}};
 window.forgotPassword=async()=>{
   const id=$('#loginId')?.value.trim()||prompt('Enter your username or email'); if(!id)return;
@@ -235,7 +260,7 @@ window.forgotPassword=async()=>{
     alert('Password reset email sent. Please check your inbox or spam folder.');
   }catch(e){alert(friendlyFirebaseError(e));}
 };
-window.logout=async()=>{await signOut(auth);};
+window.logout=async()=>{sessionStorage.removeItem('powerDinkForceAuth'); await signOut(auth);};
 
 function isCoordinator(){ return state.profile?.role === 'coordinator' || state.profile?.role === 'admin'; }
 
@@ -564,6 +589,20 @@ function renderSiteEditor(){
   renderSiteEditorPreview();
 }
 
+function renderGuestEvent(){
+ const cfg=siteSettings();
+ const ev=state.events[0];
+ if(!ev){ appEl.innerHTML=`<div class="wrap"><div class="card"><h2>Event not found</h2><p class="small">This event link may be invalid or the event may have been removed.</p><button onclick="guestOpenAuth()">Login / Create Account</button></div></div>`; return; }
+ const c=eventCounts(ev), d=new Date((ev.date||today())+'T12:00:00');
+ const statusBox=ev.cancelled?`<div class="notice warn"><b>Event cancelled.</b></div>`:ev.closedEvent?`<div class="notice warn"><b>Closed for event.</b></div>`:ev.closed?`<div class="notice warn"><b>Closed for renovation.</b></div>`:ev.full?`<div class="notice warn"><b>Fully booked.</b></div>`:ev.booked?`<div class="notice"><b>Booking Details</b><br>${esc(ev.details||'Court booked. Details coming soon.')}</div>`:`<div class="notice warn"><b>${esc(cfg.waitingTitle)}</b><br>${esc(waitingMessageText(cfg))}</div>`;
+ const details=cfg.showCoordinatorDetails&&ev.details?`<div class="notice info"><b>📢 Coordinator Details</b><br>${esc(ev.details)}</div>`:'';
+ const playerList=cfg.showPlayersList?`<div class="comingDetails guestCountOnly"><div class="person"><span><b>👥 ${c.total} signed up</b><br><span class="small">${c.playing} playing • ${c.interested} interested</span></span></div></div>`:'';
+ appEl.innerHTML=`<div class="wrap"><div class="hero heroWithBell brandHero" style="background-image:linear-gradient(rgba(0,0,0,${Math.max(0,Math.min(90,Number(cfg.headerOverlay??48)))/100}),rgba(0,0,0,${Math.max(0,Math.min(90,Number(cfg.headerOverlay??48)))/100})),url('${esc(safeImageUrl(cfg.headerBackgroundUrl,DEFAULT_SITE_SETTINGS.headerBackgroundUrl))}')"><div class="brandLeft"><img src="${esc(safeImageUrl(cfg.logoUrl,DEFAULT_SITE_SETTINGS.logoUrl))}" class="powerDinkLogo" alt="PowerDink logo"><span class="brandDivider"></span><div class="brandTitle"><h1>${esc(cfg.appTitle)}</h1></div></div></div><div class="tabs publicEventTabs"><button class="tab active">Event</button><button class="tab" onclick="guestOpenAuth()">Login / Create Account</button></div><main><div class="sectionTitle"><h2>Event Details</h2><p class="small">You can view this event without an account. A username is required to sign up.</p></div><section class="featuredEvent"><div class="featuredDate"><span>${d.toLocaleDateString(undefined,{weekday:'short'})}</span><b>${d.toLocaleDateString(undefined,{month:'short'}).toUpperCase()}</b><strong>${d.toLocaleDateString(undefined,{day:'numeric'})}</strong><em>${d.getFullYear()}</em></div><div class="featuredMain"><div class="featuredTop"><div><h2>${esc(ev.location)}</h2><p>📍 ${esc(ev.location)}<br>🕒 ${timeLabel(ev.start)} - ${timeLabel(ev.end)}</p></div><div class="featuredBadges">${c.playing>=minimumPlayers(cfg)?`<span class="badge red">${minimumPlayers(cfg)}+ Ready</span>`:''}${statusBadges(ev)}</div></div>${statusBox}${details}${ev.feeOn?`<div class="feeBox"><b>💵 Court Fee:</b> $${esc(ev.fee||'')}<br><b>Payment:</b> ${esc(ev.payment||'')}</div>`:''}<h3>${esc(cfg.signupHeading)}</h3><div class="guestSignupBox"><p><b>Want to join?</b><br>Create a username or sign in first. You will return to this same event after login.</p><div class="actions"><button class="secondary" onclick="guestOpenAuth()">${esc(cfg.interestedLabel)}</button><button class="success" onclick="guestOpenAuth()">${esc(cfg.playingLabel)}</button></div></div>${playerList}<div style="margin-top:16px"><button class="secondary" onclick="copyEventLink('${idSafe(ev.id)}')">Copy Event Link</button></div></div></section></main></div>`;
+ applyPublishedTheme();
+}
+window.guestOpenAuth=async()=>{ sessionStorage.setItem('powerDinkForceAuth','1'); try{ await signOut(auth); }catch(e){ renderLogin('Sign in or create a username to join this event.'); } };
+window.copyEventLink=async(eventId)=>{ const link=publicEventUrl(eventId); try{ await navigator.clipboard.writeText(link); alert('Event link copied.'); }catch(e){ prompt('Copy this event link:',link); } };
+
 function renderApp(){
  const cfg=siteSettings();
  appEl.innerHTML=`<div class="wrap ${state.view==='siteEditor'?'siteEditorFullWidth':''}"><div class="hero heroWithBell brandHero" style="background-image:linear-gradient(rgba(0,0,0,${Math.max(0,Math.min(90,Number(cfg.headerOverlay??48)))/100}),rgba(0,0,0,${Math.max(0,Math.min(90,Number(cfg.headerOverlay??48)))/100})),url('${esc(safeImageUrl(cfg.headerBackgroundUrl,DEFAULT_SITE_SETTINGS.headerBackgroundUrl))}')"><div class="brandLeft"><img src="${esc(safeImageUrl(cfg.logoUrl,DEFAULT_SITE_SETTINGS.logoUrl))}" class="powerDinkLogo" alt="PowerDink logo"><span class="brandDivider"></span><div class="brandTitle"><h1>${esc(cfg.appTitle)}</h1></div></div>${cfg.showNotificationBell?renderNotificationButton():''}</div>${renderNotificationDrawer()}<div class="tabs">${navItems(cfg).filter(n=>!n.hidden&&(n.access!=='coordinator'||isCoordinator())).map(n=>`<button class="tab ${state.view===n.view?'active':''}" onclick="nav('${idSafe(n.view)}')">${esc(n.label)}</button>`).join('')}${isCoordinator()?`<button class="tab ${state.view==='siteEditor'?'active':''}" onclick="nav('siteEditor')">Site Editor</button>`:''}<button class="tab" onclick="logout()">Logout</button></div><main id="main"></main></div>`;
@@ -610,8 +649,9 @@ function renderPlayer(){
  const events=[...state.events].sort((a,b)=>(a.date+a.start).localeCompare(b.date+b.start));
  const upcoming=events.filter(e=>e.date && new Date(e.date+'T23:59:59').getTime()>=Date.now());
  if(!upcoming.length){ $('#main').innerHTML=`<div class="card"><h2>No upcoming play dates</h2><p class="small">Past events are hidden from players. Waiting for the coordinator to add the next event.</p></div>`; return; }
- const current=upcoming[0];
- const future=upcoming.slice(1);
+ const requested=upcoming.find(e=>e.id===requestedEventId());
+ const current=requested||upcoming[0];
+ const future=upcoming.filter(e=>e.id!==current.id);
  const cfg=siteSettings(); const pnav=navItems(cfg).find(n=>n.view==='player'); const ph=pnav?.heading||cfg.playerHeading, ps=pnav?.subtitle||cfg.playerSubtitle, pb=pnav?.body||''; $('#main').innerHTML=`<div class="sectionTitle"><h2>${esc(ph)}</h2><p class="small">${esc(ps)}</p>${pb?`<div class="pageIntroBody">${esc(pb).replace(/\n/g,'<br>')}</div>`:''}</div>${renderCustomBlocks(cfg,false,'afterHeading')}${featuredEventCard(current)}${renderCustomBlocks(cfg,false,'afterFeatured')}${future.length?`<h2 class="otherTitle">${esc(cfg.allNextHeading)}</h2>${future.map(collapsedEventCard).join('')}`:''}`;
 }
 function feeHtml(ev){ let v=ev.payment||''; const venmoMatch=String(v).match(/@([A-Za-z0-9_.-]+)/); const venmo=venmoMatch?venmoMatch[1]:''; return `<div class="feeBox"><b>💵 Court Fee:</b> $${esc(ev.fee||'')}<br><b>Payment:</b> ${esc(v)}<div style="margin-top:10px">${venmo?`<button class="secondary" onclick="window.open('https://venmo.com/${venmo}','_blank')">Pay with Venmo</button>`:''}<button class="secondary" onclick="markPaid('${ev.id}')">I Paid</button></div></div>`; }
@@ -665,7 +705,7 @@ function renderCoordinator(){
 }
 function eventCardCoord(ev,isPast=false){
  const c=eventCounts(ev);
- return `<details class="coordEventCard"><summary><div><div class="big">${fmtDate(ev.date)} — ${esc(ev.location)}</div><p>${timeLabel(ev.start)} - ${timeLabel(ev.end)} • ${c.playing} playing • ${c.interested} interested ${isPast?'• Past event':''}</p></div><div class="coordSummaryRight">${statusBadges(ev)}<span class="coordExpandText">Expand</span></div></summary><div class="coordEventBody"><div class="row"><button class="secondary" onclick="editEvent('${ev.id}')">Edit</button><button class="danger" onclick="deleteEvent('${ev.id}')">Delete</button><button onclick="exportCsv('${ev.id}')">Export CSV</button></div><h3>Players</h3>${(ev.signups||[]).length?(ev.signups||[]).map(s=>`<div class="person"><span>${s.status==='playing'?'✅':'👍'} <b>${esc(s.name)}</b> <span class="small">${esc(s.email||s.owner||'')}</span> ${s.paid?'<span class="badge green">Paid</span>':''}</span><span><button class="secondary" onclick="toggleCheck('${ev.id}','${s.id}')">${s.checked?'Checked In':'Check In'}</button> <button class="danger" onclick="removeSignup('${ev.id}','${s.id}')">Remove</button></span></div>`).join(''):'<p class="small">No signups yet.</p>'}</div></details>`;
+ return `<details class="coordEventCard"><summary><div><div class="big">${fmtDate(ev.date)} — ${esc(ev.location)}</div><p>${timeLabel(ev.start)} - ${timeLabel(ev.end)} • ${c.playing} playing • ${c.interested} interested ${isPast?'• Past event':''}</p></div><div class="coordSummaryRight">${statusBadges(ev)}<span class="coordExpandText">Expand</span></div></summary><div class="coordEventBody"><div class="row"><button class="secondary" onclick="editEvent('${ev.id}')">Edit</button><button class="danger" onclick="deleteEvent('${ev.id}')">Delete</button><button onclick="exportCsv('${ev.id}')">Export CSV</button><button class="secondary" onclick="copyEventLink('${ev.id}')">Copy Event Link</button></div><h3>Players</h3>${(ev.signups||[]).length?(ev.signups||[]).map(s=>`<div class="person"><span>${s.status==='playing'?'✅':'👍'} <b>${esc(s.name)}</b> <span class="small">${esc(s.email||s.owner||'')}</span> ${s.paid?'<span class="badge green">Paid</span>':''}</span><span><button class="secondary" onclick="toggleCheck('${ev.id}','${s.id}')">${s.checked?'Checked In':'Check In'}</button> <button class="danger" onclick="removeSignup('${ev.id}','${s.id}')">Remove</button></span></div>`).join(''):'<p class="small">No signups yet.</p>'}</div></details>`;
 }
 
 window.publishManualNotification=async()=>{
