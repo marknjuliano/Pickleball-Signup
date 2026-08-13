@@ -5,15 +5,26 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="theme-color" content="#111111" />
   <title>Pickleball Signup</title>
-  <link rel="stylesheet" href="css/style-v372.css" />
+  <link rel="stylesheet" href="css/style.css?v=3.7.3" />
 </head>
 <body>
   <div id="app" class="appShell">
     <div style="max-width:760px;margin:40px auto;padding:20px;font-family:Arial,sans-serif">
       <h2>Loading PowerDink…</h2>
-      <p>If this stays on screen, refresh the page once.</p>
+      <p>Starting app…</p>
     </div>
   </div>
-  <script type="module" src="js/app-v372.js"></script>
+  <script>
+    window.__POWERDINK_BOOT_STARTED__ = Date.now();
+    setTimeout(() => {
+      if (!window.__POWERDINK_APP_LOADED__) {
+        const app=document.getElementById('app');
+        if(app && /Loading PowerDink/.test(app.textContent||'')){
+          app.innerHTML='<div style="max-width:760px;margin:40px auto;padding:20px;font-family:Arial,sans-serif"><div style="background:white;border:1px solid #d8e0ec;border-radius:18px;padding:24px"><h2>App JavaScript was not loaded</h2><p>This means the browser could not load <b>js/bootstrap.js</b> or <b>js/app.js</b>. Please make sure the full ZIP contents were uploaded, including the <b>js</b> folder.</p><button onclick="location.reload()">Reload App</button></div></div>';
+        }
+      }
+    }, 7000);
+  </script>
+  <script type="module" src="js/bootstrap.js?v=3.7.3"></script>
 </body>
 </html>

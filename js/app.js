@@ -9,6 +9,8 @@ import {
   onSnapshot, serverTimestamp, query, orderBy, arrayUnion, limit
 } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
 
+window.__POWERDINK_APP_LOADED__ = true;
+
 const $ = sel => document.querySelector(sel);
 const appEl = $('#app');
 window.addEventListener('error', e=>{ console.error(e.error||e.message); if(appEl && !appEl.innerHTML.trim()) appEl.innerHTML='<div class="wrap"><div class="card"><h2>App failed to load</h2><p class="small">'+String(e.message||'Unknown error').replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]))+'</p></div></div>'; });
@@ -73,7 +75,7 @@ const DEFAULT_SITE_SETTINGS = {
 };
 const SITE_SETTINGS_EXPORT_FORMAT='powerdink-site-settings';
 const SITE_SETTINGS_SCHEMA_VERSION=2;
-const APP_BUILD_VERSION='3.7.1';
+const APP_BUILD_VERSION='3.7.3';
 const SITE_SETTINGS_KEYS=Object.keys(DEFAULT_SITE_SETTINGS);
 function cleanSiteSettingsForBackup(source={}){
   const clean={};
@@ -131,8 +133,22 @@ function statusBadges(ev){
 function eventStatus(ev){ const list=selectedStatuses(ev); return list[0] || {key:'waiting',label:'Waiting',cls:'yellow',icon:'⏳'}; }
 function canSignup(ev){ const closed = ev.closed || ev.closedEvent || ev.cancelled || ev.full; const c=eventCounts(ev); return !closed && !(Number(ev.max||0)>0 && c.playing>=Number(ev.max)) && !isClosedByTime(ev); }
 function cleanup(){ unsubscribers.forEach(u=>u&&u()); unsubscribers=[]; }
-async function nav(view){ state.view=view; localStorage.setItem('pickleballView',view); if(view==='siteEditor' && isCoordinator()) await loadSiteEditorDraft(); render(); }
+async function nav(view){
+  try{
+    state.view=view;
+    localStorage.setItem('pickleballView',view);
+    if(view==='siteEditor' && isCoordinator()) await loadSiteEditorDraft();
+    render();
+  }catch(err){
+    console.error('Navigation failed',err);
+    state.view='player';
+    try{localStorage.setItem('pickleballView','player');}catch(e){}
+    render();
+  }
+}
 window.nav = nav;
+// Recover safely from stale routes saved by older builder versions.
+if(typeof state.view!=='string' || !state.view.trim()) state.view='player';
 
 onAuthStateChanged(auth, async user => {
   cleanup(); state.user=user; state.profile=null; state.events=[]; state.locations=[]; state.notifications=[]; state.showNotifications=false; state.ready=false;
@@ -169,7 +185,22 @@ function startListeners(){
   unsubscribers.push(onSnapshot(doc(db,'users',state.user.uid), snap=>{ if(snap.exists()){state.profile={id:state.user.uid,...snap.data(),children:normalizeChildren(snap.data().children)}; render();} }));
 }
 function renderError(err){ appEl.innerHTML=`<div class="wrap"><div class="card"><h2>Firebase Error</h2><div class="error">${esc(err.message)}</div><p class="small">Check Firebase config and Firestore rules.</p></div></div>`; }
-function render(){ if(!state.user) return renderLogin(); if(!state.ready) return appEl.innerHTML='<div class="wrap"><div class="card"><h2>Loading...</h2></div></div>'; renderApp(); }
+function render(){
+  try{
+    if(!state.user) return renderLogin();
+    if(!state.ready) return appEl.innerHTML='<div class="wrap"><div class="card"><h2>Loading...</h2><p class="small">Connecting to PowerDink…</p></div></div>';
+    renderApp();
+  }catch(err){
+    console.error('Render failed',err);
+    // A saved editor/custom-page route should never prevent the app from opening.
+    if(state.view!=='player'){
+      state.view='player';
+      try{ localStorage.setItem('pickleballView','player'); }catch(e){}
+      try{ renderApp(); return; }catch(secondErr){ console.error('Player fallback failed',secondErr); err=secondErr; }
+    }
+    appEl.innerHTML='<div class="wrap"><div class="card"><h2>PowerDink could not finish loading</h2><p class="small">Your data is safe. Reload once. If this message remains, send a screenshot of this box.</p><div class="error">'+esc(err?.message||String(err))+'</div><button onclick="location.reload()">Reload App</button></div></div>';
+  }
+}
 function renderLogin(){
   appEl.innerHTML=`<div class="wrap login"><div><div class="hero brandHero loginBrandHero"><div class="brandLeft"><img src="images/powerdink-logo-v271.png?v=2.7.3" class="powerDinkLogo" alt="PowerDink logo"><span class="brandDivider"></span><div class="brandTitle"><h1>Pickleball Signup</h1></div></div></div><div class="card authCard"><div class="authTabs"><button id="loginTabBtn" class="authTab active" onclick="showAuthTab('login')">Login</button><button id="createTabBtn" class="authTab" onclick="showAuthTab('create')">Create Account</button></div><section id="loginPane"><h2>Welcome Back</h2><label>Username or Email</label><input id="loginId" type="text" autocomplete="username" placeholder="Username or email"><label>Password</label><div class="passwordBox"><input id="pass" type="password" autocomplete="current-password"><button class="secondary" onclick="togglePass('pass',this)">Show</button></div><button class="authPrimary" onclick="login()">Login</button><button class="ghost authLink" onclick="forgotPassword()">Forgot Password?</button></section><section id="createPane" class="hide"><h2>Create Your Account</h2><label>Username <span class="required">*</span></label><input id="newUsername" type="text" autocomplete="username" placeholder="your.username"><p class="small fieldHelp">Use 3–24 characters: letters, numbers, dot, underscore, or hyphen.</p><label>Display Name <span class="required">*</span></label><input id="displayName" type="text" autocomplete="name" placeholder="Your Name"><label>Recovery Email <span class="muted">(optional)</span></label><input id="recoveryEmail" type="email" autocomplete="email" placeholder="name@example.com"><p class="small fieldHelp">Add an email for self-service password reset. Without one, coordinator help is required.</p><label>Password <span class="required">*</span></label><div class="passwordBox"><input id="newPass" type="password" autocomplete="new-password"><button class="secondary" onclick="togglePass('newPass',this)">Show</button></div><button class="authPrimary" onclick="createAccount()">Create Account</button><p class="small">New accounts are active immediately after creation.</p></section></div></div></div>`;
 }
@@ -529,7 +560,7 @@ function renderSiteEditor(){
   const labelsSection=`<div class="editorSection"><h3>Waiting / Booking Message</h3><p class="small">Use <b>{min}</b> anywhere in the message and it will automatically show your minimum player count.</p><label>Waiting Title</label><input value="${esc(cfg.waitingTitle)}" oninput="updateSiteDraft('waitingTitle',this.value)"><label>Waiting Message</label><textarea oninput="updateSiteDraft('waitingMessage',this.value)">${esc(cfg.waitingMessage)}</textarea><label>Minimum players before booking</label><input type="number" min="1" max="99" value="${minimumPlayers(cfg)}" oninput="updateSiteDraft('minimumPlayers',Math.max(1,Math.min(99,Number(this.value)||1)))"><div class="editorMessagePreview"><b>${esc(cfg.waitingTitle)}</b><br>${esc(waitingMessageText(cfg))}</div></div><div class="editorSection"><h3>Button & Section Labels</h3><label>Next Play Date Label</label><input value="${esc(cfg.nextPlayLabel)}" oninput="updateSiteDraft('nextPlayLabel',this.value)"><label>All Next Events Heading</label><input value="${esc(cfg.allNextHeading)}" oninput="updateSiteDraft('allNextHeading',this.value)"><label>Signup Heading</label><input value="${esc(cfg.signupHeading)}" oninput="updateSiteDraft('signupHeading',this.value)"><div class="editorTwoCol"><div><label>Interested</label><input value="${esc(cfg.interestedLabel)}" oninput="updateSiteDraft('interestedLabel',this.value)"></div><div><label>Playing</label><input value="${esc(cfg.playingLabel)}" oninput="updateSiteDraft('playingLabel',this.value)"></div></div><label>Expand Label</label><input value="${esc(cfg.expandLabel)}" oninput="updateSiteDraft('expandLabel',this.value)"></div>`;
   const backupSection=`<div class="editorSection backupSection"><h3>Site Settings Backup</h3><p class="small">Export a portable backup of your Site Editor changes. Use it with a future PowerDink version to restore your branding, navigation, page content, labels, per-tab layouts, and custom blocks.</p><div class="backupActionCard"><div><b>Export Site Settings</b><p class="small">Downloads the CURRENT editor settings as a versioned JSON backup file. It does not include player accounts, events, signups, notifications, or other live database records.</p></div><button onclick="exportSiteSettings()">Export Settings</button></div><div class="backupActionCard"><div><b>Import Site Settings</b><p class="small">Loads a PowerDink Site Settings backup into the CURRENT EDITOR DRAFT. Review it in Live Preview before publishing.</p></div><button class="secondary" onclick="chooseSiteSettingsImport()">Import Settings</button><input id="siteSettingsImportFile" type="file" accept="application/json,.json" hidden onchange="importSiteSettingsFile(this)"></div><div class="backupSafetyNote"><b>Safe update workflow</b><p class="small">Before installing a future app version: Export Site Settings → keep the JSON file → install the new version → Import Site Settings → review → Publish Changes.</p></div></div>`;
   const activeSection=tab==='builder'?builderSection:tab==='navigation'?navigationSection:tab==='labels'?labelsSection:tab==='backup'?backupSection:brandingSection;
-  $('#main').innerHTML=`<section class="siteEditorShell"><div class="siteEditorToolbar"><div><h2>Visual Site Editor <span class="versionChip">v3.7</span></h2><p>Edit, preview, save as draft, then publish when ready.</p></div><div class="editorToolbarActions"><button class="secondary" onclick="saveSiteDraft()">Save Draft</button><button class="secondary" onclick="discardSiteChanges()">Discard</button><button class="secondary" onclick="resetSiteDraft()">Reset</button><button class="publishBtn" onclick="publishSiteChanges()">Publish Changes</button></div></div><div class="siteEditorGrid"><div class="editorPanel"><div class="editorTabs"><button class="${tab==='branding'?'editorTabActive':''}" onclick="setEditorTab('branding')">Branding</button><button class="${tab==='builder'?'editorTabActive':''}" onclick="setEditorTab('builder')">Page Builder</button><button class="${tab==='navigation'?'editorTabActive':''}" onclick="setEditorTab('navigation')">Navigation</button><button class="${tab==='labels'?'editorTabActive':''}" onclick="setEditorTab('labels')">Labels</button><button class="${tab==='backup'?'editorTabActive':''}" onclick="setEditorTab('backup')">Backup</button></div>${activeSection}</div><div class="previewPanel"><div class="previewPanelHead"><div><b>Live Preview</b><span>Draft only — not live yet</span></div><div><button data-mode="desktop" class="previewModeBtn ${state.editorPreviewMode==='desktop'?'active':''}" onclick="setEditorPreviewMode('desktop')">Desktop</button><button data-mode="mobile" class="previewModeBtn ${state.editorPreviewMode==='mobile'?'active':''}" onclick="setEditorPreviewMode('mobile')">Mobile</button></div></div><div class="sitePreviewFrame" data-mode="${state.editorPreviewMode}"><div id="siteEditorPreview"></div></div></div></div></section>`;
+  $('#main').innerHTML=`<section class="siteEditorShell"><div class="siteEditorToolbar"><div><h2>Visual Site Editor <span class="versionChip">v3.7.2</span></h2><p>Edit, preview, save as draft, then publish when ready.</p></div><div class="editorToolbarActions"><button class="secondary" onclick="saveSiteDraft()">Save Draft</button><button class="secondary" onclick="discardSiteChanges()">Discard</button><button class="secondary" onclick="resetSiteDraft()">Reset</button><button class="publishBtn" onclick="publishSiteChanges()">Publish Changes</button></div></div><div class="siteEditorGrid"><div class="editorPanel"><div class="editorTabs"><button class="${tab==='branding'?'editorTabActive':''}" onclick="setEditorTab('branding')">Branding</button><button class="${tab==='builder'?'editorTabActive':''}" onclick="setEditorTab('builder')">Page Builder</button><button class="${tab==='navigation'?'editorTabActive':''}" onclick="setEditorTab('navigation')">Navigation</button><button class="${tab==='labels'?'editorTabActive':''}" onclick="setEditorTab('labels')">Labels</button><button class="${tab==='backup'?'editorTabActive':''}" onclick="setEditorTab('backup')">Backup</button></div>${activeSection}</div><div class="previewPanel"><div class="previewPanelHead"><div><b>Live Preview</b><span>Draft only — not live yet</span></div><div><button data-mode="desktop" class="previewModeBtn ${state.editorPreviewMode==='desktop'?'active':''}" onclick="setEditorPreviewMode('desktop')">Desktop</button><button data-mode="mobile" class="previewModeBtn ${state.editorPreviewMode==='mobile'?'active':''}" onclick="setEditorPreviewMode('mobile')">Mobile</button></div></div><div class="sitePreviewFrame" data-mode="${state.editorPreviewMode}"><div id="siteEditorPreview"></div></div></div></div></section>`;
   renderSiteEditorPreview();
 }
 
