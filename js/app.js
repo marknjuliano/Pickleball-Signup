@@ -1,4 +1,4 @@
-console.log('Pickleball Signup v3.2 Runtime Fix loaded');
+console.log('Pickleball Signup v3.4 Self-Service Builder loaded');
 import { auth, db } from './firebase.js';
 import {
   createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut,
@@ -57,11 +57,26 @@ const DEFAULT_SITE_SETTINGS = {
   logoUrl:'images/powerdink-logo-v271.png',
   headerBackgroundUrl:'images/powerdink-header-v271.jpg',
   headerOverlay:48,
+  headerHeight:150,
+  headerLogoWidth:220,
+  headerTitleSize:52,
+  headerBellSize:70,
+  headerPadding:24,
+  headerRadius:28,
+  headerBackgroundPosition:'center',
   showNotificationBell:true,
+  desktopContentWidth:1440,
+  navItems:[
+    {id:'player',label:'Player',visible:true,roles:'all',locked:true},
+    {id:'calendar',label:'Calendar',visible:true,roles:'all',locked:true},
+    {id:'profile',label:'Profile',visible:true,roles:'all',locked:true},
+    {id:'coordinator',label:'Coordinator',visible:true,roles:'coordinator',locked:true}
+  ],
+  customPages:[],
   customBlocks:[]
 };
 function siteSettings(){ return {...DEFAULT_SITE_SETTINGS,...(state.siteSettings||{})}; }
-let state = { user:null, profile:null, events:[], locations:[], notifications:[], showNotifications:false, view:localStorage.getItem('pickleballView')||'player', ready:false, calendarMonth:today().slice(0,7), selectedCalendarDate:today(), siteSettings:{...DEFAULT_SITE_SETTINGS}, editorDraft:null, editorPreviewMode:'desktop', editorTab:'branding' };
+let state = { user:null, profile:null, events:[], locations:[], notifications:[], showNotifications:false, view:localStorage.getItem('pickleballView')||'player', ready:false, calendarMonth:today().slice(0,7), selectedCalendarDate:today(), siteSettings:{...DEFAULT_SITE_SETTINGS}, editorDraft:null, editorPreviewMode:'desktop', editorTab:'branding', editorFullscreen:localStorage.getItem('siteEditorFullscreen')==='1' };
 let unsubscribers = [];
 
 
@@ -250,7 +265,7 @@ function statusNotificationData(ev,data,isNew){
 }
 
 
-function normalizeBlocks(blocks){ return Array.isArray(blocks)?blocks.filter(Boolean).map(b=>({...b,slot:b.slot||'afterHeading'})):[]; }
+function normalizeBlocks(blocks){ return Array.isArray(blocks)?blocks.filter(Boolean):[]; }
 function blockId(){ return (crypto?.randomUUID?.() || ('block-'+Date.now()+'-'+Math.random().toString(36).slice(2))); }
 function renderCustomBlock(block, preview=false){
   if(!block || block.hidden) return '';
@@ -262,7 +277,7 @@ function renderCustomBlock(block, preview=false){
   if(block.type==='image') return block.url?`<section class="${cls}"><img src="${esc(block.url)}" alt="${esc(block.alt||'Custom image')}"></section>`:'';
   return `<section class="${cls}"><p>${esc(block.text||'Add your text here.')}</p></section>`;
 }
-function renderCustomBlocks(cfg, preview=false, slot='afterHeading'){ return normalizeBlocks(cfg.customBlocks).filter(b=>(b.slot||'afterHeading')===slot).map(b=>renderCustomBlock(b,preview)).join(''); }
+function renderCustomBlocks(cfg, preview=false){ return normalizeBlocks(cfg.customBlocks).map(b=>renderCustomBlock(b,preview)).join(''); }
 function safeImageUrl(value,fallback){ const v=String(value||'').trim(); return v || fallback; }
 function defaultSiteBlock(type){
   const defaults={
@@ -275,10 +290,10 @@ function defaultSiteBlock(type){
   };
   return {id:blockId(),type,...(defaults[type]||defaults.text)};
 }
-window.addSiteBlock=(type,index=null,slot='afterHeading')=>{
+window.addSiteBlock=(type,index=null)=>{
   if(!state.editorDraft) state.editorDraft={...siteSettings()};
   const blocks=normalizeBlocks(state.editorDraft.customBlocks).slice();
-  const block={...defaultSiteBlock(type),slot};
+  const block=defaultSiteBlock(type);
   const at=Number.isInteger(index)?Math.max(0,Math.min(index,blocks.length)):blocks.length;
   blocks.splice(at,0,block);
   state.editorDraft.customBlocks=blocks;
@@ -327,30 +342,42 @@ window.dropSiteBlockAtEnd=(event)=>{
   const [moved]=blocks.splice(from,1);blocks.push(moved);state.editorDraft.customBlocks=blocks;draggedSiteBlockId='';renderSiteEditor();
 };
 
-function builderDropZone(slot,beforeId='',label='Drop here'){
-  return `<div class="liveDropZone" ondragover="siteBlockDragOver(event)" ondragleave="siteBlockDragLeave(event)" ondrop="dropBuilderAt(event,'${slot}','${beforeId}')"><span>＋ ${label}</span></div>`;
+function normalizedNavItems(cfg=editorSettings()){
+  const fallback=DEFAULT_SITE_SETTINGS.navItems.map(x=>({...x}));
+  const items=Array.isArray(cfg.navItems)?cfg.navItems.map(x=>({...x})):fallback;
+  const ids=new Set(items.map(x=>x.id));
+  fallback.forEach(x=>{if(!ids.has(x.id))items.push({...x});});
+  return items;
 }
-function builderPlacedBlocks(cfg,slot){
-  const arr=normalizeBlocks(cfg.customBlocks).filter(b=>(b.slot||'afterHeading')===slot);
-  if(!arr.length) return builderDropZone(slot,'','Drop element here');
-  return arr.map(b=>`${builderDropZone(slot,b.id,'Drop above')}<div class="livePlacedBlock" draggable="true" ondragstart="startSiteBlockDrag(event,'${b.id}')" ondragend="endSiteBlockDrag(event)" title="Drag to move">${renderCustomBlock(b,true)}<div class="liveBlockTools"><span>⠿ ${esc((b.type||'block').replace(/^./,m=>m.toUpperCase()))}</span><button type="button" onclick="event.stopPropagation();removeSiteBlock('${b.id}')">×</button></div></div>`).join('')+builderDropZone(slot,'','Drop below');
-}
-window.dropBuilderAt=(event,slot,beforeId='')=>{
-  event.preventDefault(); event.stopPropagation(); event.currentTarget?.classList.remove('dragOver');
-  const plain=String(event.dataTransfer?.getData('text/plain')||'');
-  const palette=draggedPaletteType||event.dataTransfer?.getData('text/site-palette')||plain.replace(/^palette:/,'');
-  let blocks=normalizeBlocks(editorSettings().customBlocks).slice();
-  if(palette && ['heading','text','announcement','image','button','divider'].includes(palette)){
-    const block={...defaultSiteBlock(palette),slot};
-    let at=beforeId?blocks.findIndex(b=>b.id===beforeId):-1; if(at<0) at=blocks.length;
-    blocks.splice(at,0,block); state.editorDraft.customBlocks=blocks; draggedPaletteType=''; renderSiteEditor(); return;
-  }
-  const sourceId=draggedSiteBlockId||event.dataTransfer?.getData('text/site-block')||plain;
-  const from=blocks.findIndex(b=>b.id===sourceId); if(from<0)return;
-  const [moved]=blocks.splice(from,1); moved.slot=slot;
-  let at=beforeId?blocks.findIndex(b=>b.id===beforeId):-1; if(at<0) at=blocks.length;
-  blocks.splice(at,0,moved); state.editorDraft.customBlocks=blocks; draggedSiteBlockId=''; renderSiteEditor();
+function normalizedCustomPages(cfg=editorSettings()){ return Array.isArray(cfg.customPages)?cfg.customPages.filter(Boolean).map(x=>({...x})):[]; }
+window.updateNavItem=(id,key,value)=>{
+  state.editorDraft.navItems=normalizedNavItems().map(x=>x.id===id?{...x,[key]:value}:x);
+  renderSiteEditor();
 };
+window.toggleNavItem=(id)=>{
+  state.editorDraft.navItems=normalizedNavItems().map(x=>x.id===id?{...x,visible:!x.visible}:x);
+  renderSiteEditor();
+};
+window.moveNavItem=(id,delta)=>{
+  const a=normalizedNavItems().slice(),i=a.findIndex(x=>x.id===id),j=i+delta;if(i<0||j<0||j>=a.length)return;[a[i],a[j]]=[a[j],a[i]];state.editorDraft.navItems=a;renderSiteEditor();
+};
+window.addCustomPage=()=>{
+  const label=(prompt('New tab name:','Rules')||'').trim(); if(!label)return;
+  const id='custom-'+blockId();
+  const pages=normalizedCustomPages(); pages.push({id,label,title:label,text:'Add your page content here.'}); state.editorDraft.customPages=pages;
+  const nav=normalizedNavItems(); nav.push({id,label,visible:true,roles:'all',locked:false,custom:true}); state.editorDraft.navItems=nav; renderSiteEditor();
+};
+window.updateCustomPage=(id,key,value)=>{state.editorDraft.customPages=normalizedCustomPages().map(x=>x.id===id?{...x,[key]:value}:x);if(key==='label'){state.editorDraft.navItems=normalizedNavItems().map(x=>x.id===id?{...x,label:value}:x);}renderSiteEditorPreview();};
+window.deleteCustomPage=(id)=>{if(!confirm('Delete this custom tab/page?'))return;state.editorDraft.customPages=normalizedCustomPages().filter(x=>x.id!==id);state.editorDraft.navItems=normalizedNavItems().filter(x=>x.id!==id);renderSiteEditor();};
+window.toggleEditorFullscreen=()=>{state.editorFullscreen=!state.editorFullscreen;localStorage.setItem('siteEditorFullscreen',state.editorFullscreen?'1':'0');render();};
+function renderNavButtons(cfg=siteSettings(),preview=false){
+  const items=normalizedNavItems(cfg).filter(x=>x.visible!==false).filter(x=>x.roles!=='coordinator'||isCoordinator());
+  return items.map(x=>preview?`<span>${esc(x.label)}</span>`:`<button class="tab ${state.view===x.id?'active':''}" onclick="nav('${idSafe(x.id)}')">${esc(x.label)}</button>`).join('');
+}
+function renderCustomPage(viewId){
+  const p=normalizedCustomPages(siteSettings()).find(x=>x.id===viewId); if(!p){state.view='player';return renderPlayer();}
+  $('#main').innerHTML=`<div class="card customPageCard"><h2>${esc(p.title||p.label||'Page')}</h2><div class="customPageText">${esc(p.text||'').replace(/\n/g,'<br>')}</div></div>`;
+}
 window.resetBrandingDraft=()=>{ if(!confirm('Reset logo and header background to the built-in PowerDink branding?'))return; state.editorDraft.logoUrl=DEFAULT_SITE_SETTINGS.logoUrl; state.editorDraft.headerBackgroundUrl=DEFAULT_SITE_SETTINGS.headerBackgroundUrl; state.editorDraft.headerOverlay=DEFAULT_SITE_SETTINGS.headerOverlay; renderSiteEditor(); };
 window.readBrandImageFile=(input,key)=>{
   const file=input.files?.[0]; if(!file)return;
@@ -386,7 +413,7 @@ async function loadSiteEditorDraft(){
 function editorSettings(){ return {...siteSettings(),...(state.editorDraft||{})}; }
 function minimumPlayers(cfg=siteSettings()){ const n=Math.floor(Number(cfg.minimumPlayers||6)); return Math.max(1,Math.min(99,Number.isFinite(n)?n:6)); }
 function waitingMessageText(cfg=siteSettings()){ return String(cfg.waitingMessage||DEFAULT_SITE_SETTINGS.waitingMessage).replaceAll('{min}',String(minimumPlayers(cfg))); }
-window.setEditorTab=(tab)=>{ if(!['branding','builder','labels'].includes(tab)) return; state.editorTab=tab; renderSiteEditor(); };
+window.setEditorTab=(tab)=>{ if(!['branding','builder','labels','navigation'].includes(tab)) return; state.editorTab=tab; renderSiteEditor(); };
 window.updateSiteDraft=(key,value)=>{
   if(!state.editorDraft) state.editorDraft={...siteSettings()};
   state.editorDraft[key]=value;
@@ -417,15 +444,26 @@ function sitePreviewEvent(){
   const upcoming=[...state.events].filter(e=>e.date && new Date(e.date+'T23:59:59').getTime()>=Date.now()).sort((a,b)=>(a.date+a.start).localeCompare(b.date+b.start));
   return upcoming[0]||{date:today(),start:'19:00',end:'22:00',location:'Pickle N\' Play',details:'Coordinator details appear here.',signups:[]};
 }
+function previewBuilderBlocks(cfg){
+  const blocks=normalizeBlocks(cfg.customBlocks);
+  if(state.editorTab!=='builder') return renderCustomBlocks(cfg,true);
+  const parts=[];
+  blocks.forEach((b,i)=>{
+    parts.push(`<div class="previewDropZone siteBlockDropTarget" ondragover="siteBlockDragOver(event)" ondragleave="siteBlockDragLeave(event)" ondrop="dropSiteBlock(event,'${b.id}')"><span>Drop here</span></div>`);
+    parts.push(`<div class="previewEditableBlock ${b.hidden?'isHidden':''}" draggable="true" ondragstart="startSiteBlockDrag(event,'${b.id}')" ondragend="endSiteBlockDrag(event)"><span class="previewDragHandle">⠿</span>${renderCustomBlock(b,true)}<div class="previewBlockActions"><button onclick="moveSiteBlock('${b.id}',-1)">↑</button><button onclick="moveSiteBlock('${b.id}',1)">↓</button><button onclick="duplicateSiteBlock('${b.id}')">Duplicate</button><button onclick="toggleSiteBlock('${b.id}')">${b.hidden?'Show':'Hide'}</button></div></div>`);
+  });
+  parts.push(`<div class="previewDropZone end siteBlockDropTarget" ondragover="siteBlockDragOver(event)" ondragleave="siteBlockDragLeave(event)" ondrop="dropSiteBlockAtEnd(event)"><span>＋ Drop element here</span></div>`);
+  return parts.join('');
+}
 function renderSiteEditorPreview(){
   const root=document.querySelector('#siteEditorPreview'); if(!root) return;
   const cfg=editorSettings(), ev=sitePreviewEvent();
   const d=new Date((ev.date||today())+'T12:00:00');
   const signups=Array.isArray(ev.signups)?ev.signups:[];
-  const logo=safeImageUrl(cfg.logoUrl,DEFAULT_SITE_SETTINGS.logoUrl), bg=safeImageUrl(cfg.headerBackgroundUrl,DEFAULT_SITE_SETTINGS.headerBackgroundUrl);
-  const editMode=(state.editorTab||'branding')==='builder';
-  const slot=(name)=>editMode?builderPlacedBlocks(cfg,name):renderCustomBlocks(cfg,true,name);
-  root.innerHTML=`<div class="previewApp ${editMode?'builderLiveCanvas':''}" style="--preview-accent:${esc(cfg.accent)}"><div class="previewHero" style="background-image:linear-gradient(rgba(0,0,0,${Number(cfg.headerOverlay??48)/100}),rgba(0,0,0,${Number(cfg.headerOverlay??48)/100})),url('${esc(bg)}')"><img src="${esc(logo)}" alt="PowerDink"><span></span><h2>${esc(cfg.appTitle)}</h2>${cfg.showNotificationBell?'<button>🔔</button>':''}</div><div class="previewTabs"><b>Player</b><span>Calendar</span><span>Profile</span><span>Coordinator</span></div><div class="previewHeading"><h3>${esc(cfg.playerHeading)}</h3><p>${esc(cfg.playerSubtitle)}</p></div>${slot('afterHeading')}<div class="previewEvent"><aside>${cfg.showNextPlayRibbon?`<b>⭐ ${esc(cfg.nextPlayLabel)}</b>`:''}<strong>${d.toLocaleDateString(undefined,{day:'numeric'})}</strong><span>${d.toLocaleDateString(undefined,{month:'short'}).toUpperCase()} ${d.getFullYear()}</span></aside><main><h3>${esc(ev.location)}</h3><p>📍 ${esc(ev.location)}<br>🕒 ${timeLabel(ev.start)} - ${timeLabel(ev.end)}</p>${slot('beforeWaiting')}<div class="previewNotice"><b>${esc(cfg.waitingTitle)}</b><br>${esc(waitingMessageText(cfg))}</div>${slot('afterWaiting')}${cfg.showCoordinatorDetails?`<div class="previewDetail"><b>📢 Coordinator Details</b><br>${esc(ev.details||'Coordinator details appear here.')}</div>`:''}${slot('afterDetails')}<h4>${esc(cfg.signupHeading)}</h4>${slot('beforeSignup')}<div class="previewPerson"><span><b>${esc(state.profile?.name||'Player Name')}</b><small>Choose ${esc(cfg.interestedLabel)} or ${esc(cfg.playingLabel)}.</small></span><button>${esc(cfg.interestedLabel)}</button><button>${esc(cfg.playingLabel)}</button></div>${slot('afterSignup')}${cfg.showPlayersList?`<div class="previewPlayers">👥 Players (${signups.length}) <span>${esc(cfg.expandLabel)}</span></div>`:''}${slot('afterPlayers')}</main></div>${slot('afterFeatured')}</div>`;
+  const logo=safeImageUrl(cfg.logoUrl,DEFAULT_SITE_SETTINGS.logoUrl);
+  const bg=safeImageUrl(cfg.headerBackgroundUrl,DEFAULT_SITE_SETTINGS.headerBackgroundUrl);
+  const hp=Math.max(8,Math.min(60,Number(cfg.headerPadding||24))),hh=Math.max(80,Math.min(280,Number(cfg.headerHeight||150))),lw=Math.max(70,Math.min(500,Number(cfg.headerLogoWidth||220))),ts=Math.max(18,Math.min(90,Number(cfg.headerTitleSize||52))),bs=Math.max(36,Math.min(110,Number(cfg.headerBellSize||70))),hr=Math.max(0,Math.min(60,Number(cfg.headerRadius||28)));
+  root.innerHTML=`<div class="previewApp" style="--preview-accent:${esc(cfg.accent)}"><div class="previewHero" style="min-height:${hh}px;padding:${hp}px;border-radius:${hr}px;background-position:${esc(cfg.headerBackgroundPosition||'center')};background-image:linear-gradient(rgba(0,0,0,${Number(cfg.headerOverlay??48)/100}),rgba(0,0,0,${Number(cfg.headerOverlay??48)/100})),url('${esc(bg)}')"><img style="width:${lw}px;max-width:32%" src="${esc(logo)}" alt="PowerDink"><span></span><h2 style="font-size:clamp(20px,4vw,${ts}px)">${esc(cfg.appTitle)}</h2>${cfg.showNotificationBell?`<button style="width:${bs}px;height:${bs}px;min-width:${bs}px">🔔</button>`:''}</div><div class="previewTabs">${renderNavButtons(cfg,true)}</div><div class="previewHeading"><h3>${esc(cfg.playerHeading)}</h3><p>${esc(cfg.playerSubtitle)}</p></div>${previewBuilderBlocks(cfg)}<div class="previewEvent"><aside>${cfg.showNextPlayRibbon?`<b>⭐ ${esc(cfg.nextPlayLabel)}</b>`:''}<strong>${d.toLocaleDateString(undefined,{day:'numeric'})}</strong><span>${d.toLocaleDateString(undefined,{month:'short'}).toUpperCase()} ${d.getFullYear()}</span></aside><main><h3>${esc(ev.location)}</h3><p>📍 ${esc(ev.location)}<br>🕒 ${timeLabel(ev.start)} - ${timeLabel(ev.end)}</p><div class="previewNotice"><b>${esc(cfg.waitingTitle)}</b><br>${esc(waitingMessageText(cfg))}</div>${cfg.showCoordinatorDetails?`<div class="previewDetail"><b>📢 Coordinator Details</b><br>${esc(ev.details||'Coordinator details appear here.')}</div>`:''}<h4>${esc(cfg.signupHeading)}</h4><div class="previewPerson"><span><b>${esc(state.profile?.name||'Player Name')}</b><small>Choose ${esc(cfg.interestedLabel)} or ${esc(cfg.playingLabel)}.</small></span><button>${esc(cfg.interestedLabel)}</button><button>${esc(cfg.playingLabel)}</button></div>${cfg.showPlayersList?`<div class="previewPlayers">👥 Players (${signups.length}) <span>${esc(cfg.expandLabel)}</span></div>`:''}</main></div></div>`;
   root.closest('.sitePreviewFrame')?.setAttribute('data-mode',state.editorPreviewMode);
 }
 
@@ -433,24 +471,27 @@ function renderSiteEditor(){
   if(!isCoordinator()){ nav('player'); return; }
   if(!state.editorDraft){ loadSiteEditorDraft().then(()=>renderSiteEditor()); return; }
   const cfg=editorSettings(), blocks=normalizeBlocks(cfg.customBlocks), tab=state.editorTab||'branding';
-  const blockList=blocks.length?blocks.map((b,i)=>siteBlockEditor(b,i,blocks.length)).join(''):'<div class="emptyBuilder"><b>No custom blocks yet.</b><p>Add a heading, announcement, text, image, button, or divider.</p></div>';
-  const brandingSection=`<div class="editorSection"><h3>Branding</h3><label>App Title</label><input value="${esc(cfg.appTitle)}" oninput="updateSiteDraft('appTitle',this.value)"><div class="brandAssetGrid"><div><label>Logo</label><div class="assetPreview logoAsset"><img src="${esc(safeImageUrl(cfg.logoUrl,DEFAULT_SITE_SETTINGS.logoUrl))}" alt="Current logo"></div><label>Logo Image URL</label><input value="${esc(cfg.logoUrl||'')}" placeholder="images/... or https://..." oninput="updateSiteDraft('logoUrl',this.value)"><label class="filePickerLabel">Or choose a small image file<input type="file" accept="image/*" onchange="readBrandImageFile(this,'logoUrl')"></label></div><div><label>Header Background</label><div class="assetPreview bgAsset" style="background-image:url('${esc(safeImageUrl(cfg.headerBackgroundUrl,DEFAULT_SITE_SETTINGS.headerBackgroundUrl))}')"></div><label>Background Image URL</label><input value="${esc(cfg.headerBackgroundUrl||'')}" placeholder="images/... or https://..." oninput="updateSiteDraft('headerBackgroundUrl',this.value)"><label class="filePickerLabel">Or choose a small image file<input type="file" accept="image/*" onchange="readBrandImageFile(this,'headerBackgroundUrl')"></label></div></div><label>Header dark overlay <b>${Number(cfg.headerOverlay??48)}%</b></label><input type="range" min="0" max="90" value="${Number(cfg.headerOverlay??48)}" oninput="updateSiteDraft('headerOverlay',Number(this.value));this.previousElementSibling.querySelector('b').textContent=this.value+'%'"><label class="editorToggle"><span>Show Notification Bell</span><input type="checkbox" ${cfg.showNotificationBell?'checked':''} onchange="updateSiteDraftBool('showNotificationBell',this.checked)"></label><label>Accent Color</label><input type="color" value="${esc(cfg.accent)}" oninput="updateSiteDraft('accent',this.value)"><button class="secondary" onclick="resetBrandingDraft()">Reset PowerDink Branding</button></div>`;
-  const blockLibrary=[
-    ['heading','H','Heading','Section title'],['text','¶','Text','Paragraph or note'],['announcement','!','Announcement','Highlighted message'],['image','▧','Image','Image from URL'],['button','↗','Button','Link button'],['divider','—','Divider','Spacing line']
-  ].map(([type,icon,label,help])=>`<button class="builderPaletteItem" draggable="true" ondragstart="startPaletteBlockDrag(event,'${type}')" onclick="addSiteBlock('${type}')"><span>${icon}</span><b>${label}</b><small>${help}</small><em>Drag</em></button>`).join('');
-  const builderSection=`<div class="editorSection"><h3>Player Page Layout</h3><label>Main Heading</label><input value="${esc(cfg.playerHeading)}" oninput="updateSiteDraft('playerHeading',this.value)"><label>Subtitle</label><textarea oninput="updateSiteDraft('playerSubtitle',this.value)">${esc(cfg.playerSubtitle)}</textarea><label class="editorToggle"><span>Show “Next Play Date” ribbon</span><input type="checkbox" ${cfg.showNextPlayRibbon?'checked':''} onchange="updateSiteDraftBool('showNextPlayRibbon',this.checked)"></label><label class="editorToggle"><span>Show Coordinator Details</span><input type="checkbox" ${cfg.showCoordinatorDetails?'checked':''} onchange="updateSiteDraftBool('showCoordinatorDetails',this.checked)"></label><label class="editorToggle"><span>Show Players list</span><input type="checkbox" ${cfg.showPlayersList?'checked':''} onchange="updateSiteDraftBool('showPlayersList',this.checked)"></label><label class="editorToggle"><span>Players list expanded by default</span><input type="checkbox" ${cfg.playersDefaultOpen?'checked':''} onchange="updateSiteDraftBool('playersDefaultOpen',this.checked)"></label></div><div class="editorSection pageBuilderSection"><div class="builderTitle"><div><h3>Elements</h3><p class="small">Drag an element directly onto the actual Player Page preview on the right. Green drop zones show exactly where it will land.</p></div></div><div class="blockLibrary wideLibrary"><div class="blockLibraryTitle"><b>Drag onto Player Page</b><span>Drop exactly where you want it</span></div>${blockLibrary}</div><div class="builderSettings"><h3>Placed Blocks</h3><p class="small">Use this area to edit the content after placing it. You can still drag each block in the preview to move it.</p><div class="siteBlocksList">${blockList}</div></div></div>`;
+  const blockList=blocks.length?blocks.map((b,i)=>siteBlockEditor(b,i,blocks.length)).join(''):'<div class="emptyBuilder"><b>No custom blocks yet.</b><p>Drag an element onto the Live Page Canvas or click an element to add it.</p></div>';
+  const brandingSection=`<div class="editorSection"><h3>Header & Branding</h3><label>App Title</label><input value="${esc(cfg.appTitle)}" oninput="updateSiteDraft('appTitle',this.value)"><div class="brandAssetGrid"><div><label>Logo</label><div class="assetPreview logoAsset"><img src="${esc(safeImageUrl(cfg.logoUrl,DEFAULT_SITE_SETTINGS.logoUrl))}" alt="Current logo"></div><label>Logo Image URL</label><input value="${esc(cfg.logoUrl||'')}" placeholder="images/... or https://..." oninput="updateSiteDraft('logoUrl',this.value)"><label class="filePickerLabel">Or choose a small image file<input type="file" accept="image/*" onchange="readBrandImageFile(this,'logoUrl')"></label></div><div><label>Header Background</label><div class="assetPreview bgAsset" style="background-image:url('${esc(safeImageUrl(cfg.headerBackgroundUrl,DEFAULT_SITE_SETTINGS.headerBackgroundUrl))}')"></div><label>Background Image URL</label><input value="${esc(cfg.headerBackgroundUrl||'')}" placeholder="images/... or https://..." oninput="updateSiteDraft('headerBackgroundUrl',this.value)"><label class="filePickerLabel">Or choose a small image file<input type="file" accept="image/*" onchange="readBrandImageFile(this,'headerBackgroundUrl')"></label></div></div><div class="editorTwoCol"><div><label>Header Height</label><input type="range" min="80" max="280" value="${Number(cfg.headerHeight||150)}" oninput="updateSiteDraft('headerHeight',Number(this.value))"></div><div><label>Logo Size</label><input type="range" min="70" max="500" value="${Number(cfg.headerLogoWidth||220)}" oninput="updateSiteDraft('headerLogoWidth',Number(this.value))"></div><div><label>Title Size</label><input type="range" min="18" max="90" value="${Number(cfg.headerTitleSize||52)}" oninput="updateSiteDraft('headerTitleSize',Number(this.value))"></div><div><label>Bell Size</label><input type="range" min="36" max="110" value="${Number(cfg.headerBellSize||70)}" oninput="updateSiteDraft('headerBellSize',Number(this.value))"></div><div><label>Header Padding</label><input type="range" min="8" max="60" value="${Number(cfg.headerPadding||24)}" oninput="updateSiteDraft('headerPadding',Number(this.value))"></div><div><label>Corner Radius</label><input type="range" min="0" max="60" value="${Number(cfg.headerRadius||28)}" oninput="updateSiteDraft('headerRadius',Number(this.value))"></div></div><label>Background Position</label><select onchange="updateSiteDraft('headerBackgroundPosition',this.value)">${['left center','center','right center','center top','center bottom'].map(v=>`<option ${cfg.headerBackgroundPosition===v?'selected':''}>${v}</option>`).join('')}</select><label>Header dark overlay <b>${Number(cfg.headerOverlay??48)}%</b></label><input type="range" min="0" max="90" value="${Number(cfg.headerOverlay??48)}" oninput="updateSiteDraft('headerOverlay',Number(this.value));this.previousElementSibling.querySelector('b').textContent=this.value+'%'"><label class="editorToggle"><span>Show Notification Bell</span><input type="checkbox" ${cfg.showNotificationBell?'checked':''} onchange="updateSiteDraftBool('showNotificationBell',this.checked)"></label><label>Accent Color</label><input type="color" value="${esc(cfg.accent)}" oninput="updateSiteDraft('accent',this.value)"><label>Desktop Page Width</label><input type="range" min="960" max="1900" step="20" value="${Number(cfg.desktopContentWidth||1440)}" oninput="updateSiteDraft('desktopContentWidth',Number(this.value))"><button class="secondary" onclick="resetBrandingDraft()">Reset PowerDink Branding</button></div>`;
+  const blockLibrary=[['heading','H','Heading','Section title'],['text','¶','Text','Paragraph or note'],['announcement','!','Announcement','Highlighted message'],['image','▧','Image','Image from URL'],['button','↗','Button','Link button'],['divider','—','Divider','Spacing line']].map(([type,icon,label,help])=>`<button class="builderPaletteItem" draggable="true" ondragstart="startPaletteBlockDrag(event,'${type}')" onclick="addSiteBlock('${type}')"><span>${icon}</span><b>${label}</b><small>${help}</small><em>Drag</em></button>`).join('');
+  const builderSection=`<div class="editorSection"><h3>Page Elements</h3><p class="small">Drag an element directly onto the Live Page Canvas. Green drop zones show exactly where it will appear.</p><div class="blockLibrary wideLibrary"><div class="blockLibraryTitle"><b>Elements</b><span>Drag onto preview</span></div>${blockLibrary}</div></div><div class="editorSection"><h3>Existing Custom Blocks</h3>${blockList}</div><div class="editorSection"><h3>Player Page Layout</h3><label>Main Heading</label><input value="${esc(cfg.playerHeading)}" oninput="updateSiteDraft('playerHeading',this.value)"><label>Subtitle</label><textarea oninput="updateSiteDraft('playerSubtitle',this.value)">${esc(cfg.playerSubtitle)}</textarea><label class="editorToggle"><span>Show “Next Play Date” ribbon</span><input type="checkbox" ${cfg.showNextPlayRibbon?'checked':''} onchange="updateSiteDraftBool('showNextPlayRibbon',this.checked)"></label><label class="editorToggle"><span>Show Coordinator Details</span><input type="checkbox" ${cfg.showCoordinatorDetails?'checked':''} onchange="updateSiteDraftBool('showCoordinatorDetails',this.checked)"></label><label class="editorToggle"><span>Show Players list</span><input type="checkbox" ${cfg.showPlayersList?'checked':''} onchange="updateSiteDraftBool('showPlayersList',this.checked)"></label><label class="editorToggle"><span>Players list expanded by default</span><input type="checkbox" ${cfg.playersDefaultOpen?'checked':''} onchange="updateSiteDraftBool('playersDefaultOpen',this.checked)"></label></div>`;
   const labelsSection=`<div class="editorSection"><h3>Waiting / Booking Message</h3><p class="small">Use <b>{min}</b> anywhere in the message and it will automatically show your minimum player count.</p><label>Waiting Title</label><input value="${esc(cfg.waitingTitle)}" oninput="updateSiteDraft('waitingTitle',this.value)"><label>Waiting Message</label><textarea oninput="updateSiteDraft('waitingMessage',this.value)">${esc(cfg.waitingMessage)}</textarea><label>Minimum players before booking</label><input type="number" min="1" max="99" value="${minimumPlayers(cfg)}" oninput="updateSiteDraft('minimumPlayers',Math.max(1,Math.min(99,Number(this.value)||1)))"><div class="editorMessagePreview"><b>${esc(cfg.waitingTitle)}</b><br>${esc(waitingMessageText(cfg))}</div></div><div class="editorSection"><h3>Button & Section Labels</h3><label>Next Play Date Label</label><input value="${esc(cfg.nextPlayLabel)}" oninput="updateSiteDraft('nextPlayLabel',this.value)"><label>All Next Events Heading</label><input value="${esc(cfg.allNextHeading)}" oninput="updateSiteDraft('allNextHeading',this.value)"><label>Signup Heading</label><input value="${esc(cfg.signupHeading)}" oninput="updateSiteDraft('signupHeading',this.value)"><div class="editorTwoCol"><div><label>Interested</label><input value="${esc(cfg.interestedLabel)}" oninput="updateSiteDraft('interestedLabel',this.value)"></div><div><label>Playing</label><input value="${esc(cfg.playingLabel)}" oninput="updateSiteDraft('playingLabel',this.value)"></div></div><label>Expand Label</label><input value="${esc(cfg.expandLabel)}" oninput="updateSiteDraft('expandLabel',this.value)"></div>`;
-  const activeSection=tab==='builder'?builderSection:tab==='labels'?labelsSection:brandingSection;
-  $('#main').innerHTML=`<section class="siteEditorShell"><div class="siteEditorToolbar"><div><h2>Visual Site Editor <span class="versionChip">v3.4</span></h2><p>Edit, preview, save as draft, then publish when ready.</p></div><div class="editorToolbarActions"><button class="secondary" onclick="saveSiteDraft()">Save Draft</button><button class="secondary" onclick="discardSiteChanges()">Discard</button><button class="secondary" onclick="resetSiteDraft()">Reset</button><button class="publishBtn" onclick="publishSiteChanges()">Publish Changes</button></div></div><div class="siteEditorGrid"><div class="editorPanel"><div class="editorTabs"><button class="${tab==='branding'?'editorTabActive':''}" onclick="setEditorTab('branding')">Branding</button><button class="${tab==='builder'?'editorTabActive':''}" onclick="setEditorTab('builder')">Page Builder</button><button class="${tab==='labels'?'editorTabActive':''}" onclick="setEditorTab('labels')">Labels</button></div>${activeSection}</div><div class="previewPanel"><div class="previewPanelHead"><div><b>Live Preview</b><span>Draft only — not live yet</span></div><div><button data-mode="desktop" class="previewModeBtn ${state.editorPreviewMode==='desktop'?'active':''}" onclick="setEditorPreviewMode('desktop')">Desktop</button><button data-mode="mobile" class="previewModeBtn ${state.editorPreviewMode==='mobile'?'active':''}" onclick="setEditorPreviewMode('mobile')">Mobile</button></div></div><div class="sitePreviewFrame" data-mode="${state.editorPreviewMode}"><div id="siteEditorPreview"></div></div></div></div></section>`;
+  const nav=normalizedNavItems(cfg),pages=normalizedCustomPages(cfg);
+  const navigationSection=`<div class="editorSection"><div class="navEditorTitle"><div><h3>Navigation / Tabs</h3><p class="small">Rename, reorder, show/hide existing tabs, or add your own page.</p></div><button onclick="addCustomPage()">+ Add Tab</button></div><div class="navEditorList">${nav.map((x,i)=>`<div class="navEditorRow"><span class="navGrip">⠿</span><input value="${esc(x.label)}" oninput="updateNavItem('${idSafe(x.id)}','label',this.value)"><select onchange="updateNavItem('${idSafe(x.id)}','roles',this.value)"><option value="all" ${x.roles!=='coordinator'?'selected':''}>Everyone</option><option value="coordinator" ${x.roles==='coordinator'?'selected':''}>Coordinator only</option></select><button class="tinyBtn" onclick="moveNavItem('${idSafe(x.id)}',-1)" ${i===0?'disabled':''}>↑</button><button class="tinyBtn" onclick="moveNavItem('${idSafe(x.id)}',1)" ${i===nav.length-1?'disabled':''}>↓</button><button class="tinyBtn" onclick="toggleNavItem('${idSafe(x.id)}')">${x.visible===false?'Show':'Hide'}</button>${x.custom?`<button class="tinyBtn dangerLite" onclick="deleteCustomPage('${idSafe(x.id)}')">Delete</button>`:'<span class="lockedMini">Core</span>'}</div>`).join('')}</div></div>${pages.map(p=>`<div class="editorSection"><h3>Custom Page: ${esc(p.label)}</h3><label>Page Title</label><input value="${esc(p.title||'')}" oninput="updateCustomPage('${idSafe(p.id)}','title',this.value)"><label>Page Content</label><textarea rows="8" oninput="updateCustomPage('${idSafe(p.id)}','text',this.value)">${esc(p.text||'')}</textarea></div>`).join('')}`;
+  const activeSection=tab==='builder'?builderSection:tab==='labels'?labelsSection:tab==='navigation'?navigationSection:brandingSection;
+  $('#main').innerHTML=`<section class="siteEditorShell ${state.editorFullscreen?'editorFullscreen':''}"><div class="siteEditorToolbar"><div><h2>Visual Site Editor <span class="versionChip">v3.4</span></h2><p>Design the site yourself — draft, preview, then publish.</p></div><div class="editorToolbarActions"><button class="secondary" onclick="toggleEditorFullscreen()">${state.editorFullscreen?'Exit Full Screen':'Full Screen Builder'}</button><button class="secondary" onclick="saveSiteDraft()">Save Draft</button><button class="secondary" onclick="discardSiteChanges()">Discard</button><button class="secondary" onclick="resetSiteDraft()">Reset</button><button class="publishBtn" onclick="publishSiteChanges()">Publish Changes</button></div></div><div class="siteEditorGrid"><div class="editorPanel"><div class="editorTabs"><button class="${tab==='branding'?'editorTabActive':''}" onclick="setEditorTab('branding')">Branding</button><button class="${tab==='builder'?'editorTabActive':''}" onclick="setEditorTab('builder')">Page Builder</button><button class="${tab==='navigation'?'editorTabActive':''}" onclick="setEditorTab('navigation')">Navigation</button><button class="${tab==='labels'?'editorTabActive':''}" onclick="setEditorTab('labels')">Labels</button></div>${activeSection}</div><div class="previewPanel"><div class="previewPanelHead"><div><b>${tab==='builder'?'Live Page Canvas':'Live Preview'}</b><span>${tab==='builder'?'Drag elements directly onto the page':'Draft only — not live yet'}</span></div><div><button data-mode="desktop" class="previewModeBtn ${state.editorPreviewMode==='desktop'?'active':''}" onclick="setEditorPreviewMode('desktop')">Desktop</button><button data-mode="mobile" class="previewModeBtn ${state.editorPreviewMode==='mobile'?'active':''}" onclick="setEditorPreviewMode('mobile')">Mobile</button></div></div><div class="sitePreviewFrame" data-mode="${state.editorPreviewMode}"><div id="siteEditorPreview"></div></div></div></div></section>`;
   renderSiteEditorPreview();
 }
 
 function renderApp(){
  const cfg=siteSettings();
- appEl.innerHTML=`<div class="wrap"><div class="hero heroWithBell brandHero" style="background-image:linear-gradient(rgba(0,0,0,${Math.max(0,Math.min(90,Number(cfg.headerOverlay??48)))/100}),rgba(0,0,0,${Math.max(0,Math.min(90,Number(cfg.headerOverlay??48)))/100})),url('${esc(safeImageUrl(cfg.headerBackgroundUrl,DEFAULT_SITE_SETTINGS.headerBackgroundUrl))}')"><div class="brandLeft"><img src="${esc(safeImageUrl(cfg.logoUrl,DEFAULT_SITE_SETTINGS.logoUrl))}" class="powerDinkLogo" alt="PowerDink logo"><span class="brandDivider"></span><div class="brandTitle"><h1>${esc(cfg.appTitle)}</h1></div></div>${cfg.showNotificationBell?renderNotificationButton():''}</div>${renderNotificationDrawer()}<div class="tabs"><button class="tab ${state.view==='player'?'active':''}" onclick="nav('player')">Player</button><button class="tab ${state.view==='calendar'?'active':''}" onclick="nav('calendar')">Calendar</button><button class="tab ${state.view==='profile'?'active':''}" onclick="nav('profile')">Profile</button>${isCoordinator()?`<button class="tab ${state.view==='coordinator'?'active':''}" onclick="nav('coordinator')">Coordinator</button><button class="tab ${state.view==='siteEditor'?'active':''}" onclick="nav('siteEditor')">Site Editor</button>`:''}<button class="tab" onclick="logout()">Logout</button></div><main id="main"></main></div>`;
+ const hp=Math.max(8,Math.min(60,Number(cfg.headerPadding||24))),hh=Math.max(80,Math.min(280,Number(cfg.headerHeight||150))),lw=Math.max(70,Math.min(500,Number(cfg.headerLogoWidth||220))),ts=Math.max(18,Math.min(90,Number(cfg.headerTitleSize||52))),bs=Math.max(36,Math.min(110,Number(cfg.headerBellSize||70))),hr=Math.max(0,Math.min(60,Number(cfg.headerRadius||28))),cw=Math.max(960,Math.min(1900,Number(cfg.desktopContentWidth||1440)));
+ const isEditor=state.view==='siteEditor'&&isCoordinator();
+ appEl.innerHTML=`<div class="wrap ${isEditor?'siteEditorWideWrap':''}" style="--site-content-width:${cw}px"><div class="hero heroWithBell brandHero" style="--site-header-height:${hh}px;--site-logo-width:${lw}px;--site-title-size:${ts}px;--site-bell-size:${bs}px;--site-header-padding:${hp}px;--site-header-radius:${hr}px;background-position:${esc(cfg.headerBackgroundPosition||'center')};background-image:linear-gradient(rgba(0,0,0,${Math.max(0,Math.min(90,Number(cfg.headerOverlay??48)))/100}),rgba(0,0,0,${Math.max(0,Math.min(90,Number(cfg.headerOverlay??48)))/100})),url('${esc(safeImageUrl(cfg.headerBackgroundUrl,DEFAULT_SITE_SETTINGS.headerBackgroundUrl))}')"><div class="brandLeft"><img src="${esc(safeImageUrl(cfg.logoUrl,DEFAULT_SITE_SETTINGS.logoUrl))}" class="powerDinkLogo" alt="PowerDink logo"><span class="brandDivider"></span><div class="brandTitle"><h1>${esc(cfg.appTitle)}</h1></div></div>${cfg.showNotificationBell?renderNotificationButton():''}</div>${renderNotificationDrawer()}<div class="tabs">${renderNavButtons(cfg)}${isCoordinator()?`<button class="tab ${state.view==='siteEditor'?'active':''}" onclick="nav('siteEditor')">Site Editor</button>`:''}<button class="tab" onclick="logout()">Logout</button></div><main id="main"></main></div>`;
  applyPublishedTheme();
- if(state.view==='calendar') renderCalendar(); else if(state.view==='profile') renderProfile(); else if(state.view==='coordinator' && isCoordinator()) renderCoordinator(); else if(state.view==='siteEditor' && isCoordinator()) renderSiteEditor(); else renderPlayer();
+ if(state.view==='calendar') renderCalendar(); else if(state.view==='profile') renderProfile(); else if(state.view==='coordinator' && isCoordinator()) renderCoordinator(); else if(state.view==='siteEditor' && isCoordinator()) renderSiteEditor(); else if(String(state.view).startsWith('custom-')) renderCustomPage(state.view); else renderPlayer();
 }
+
 function playerEventInner(ev, opts={}){
  const cfg=siteSettings();
  const c=eventCounts(ev), st=eventStatus(ev), signups=Array.isArray(ev.signups)?ev.signups:[], mine=signups.filter(s=>s.owner===state.user.uid || s.email===state.user.email), family=[state.profile.name,...normalizeChildren(state.profile.children)].filter(Boolean), closed=!canSignup(ev);
@@ -467,7 +508,7 @@ function playerEventInner(ev, opts={}){
  const signupHtml = closed
   ? `<p><span class="badge red">${closedReason}</span></p>`
   : family.map(n=>{const ex=mine.find(s=>s.name===n);return `<div class="person"><div><b>${esc(n)}</b><div class="small">${ex?esc(ex.status):'Choose Interested or Playing.'}</div></div><div class="actions"><button class="secondary" onclick="upsertSignup('${ev.id}','${idSafe(n)}','interested')">${esc(cfg.interestedLabel)}</button><button class="success" onclick="upsertSignup('${ev.id}','${idSafe(n)}','playing')">${esc(cfg.playingLabel)}</button>${ex?`<button class="danger" onclick="removeMySignup('${ev.id}','${idSafe(n)}')">Remove</button>`:''}</div></div>`}).join('');
- return `${renderCustomBlocks(cfg,false,'beforeWaiting')}${statusBox}${renderCustomBlocks(cfg,false,'afterWaiting')}${detailBox}${renderCustomBlocks(cfg,false,'afterDetails')}${ev.feeOn?feeHtml(ev):''}<h3>${esc(cfg.signupHeading)}</h3>${renderCustomBlocks(cfg,false,'beforeSignup')}${signupHtml}${renderCustomBlocks(cfg,false,'afterSignup')}${cfg.showPlayersList?`<details class="comingDetails" ${cfg.playersDefaultOpen?'open':''}><summary><span>👥 Players (${signups.length})</span></summary><div class="comingList">${signups.length?signups.map(s=>`<div class="person"><span>${s.status==='playing'?'✅':'👍'} <b>${esc(s.name)}</b> <span class="small">${esc(s.status)}</span></span></div>`).join(''):'<p class="small">No signups yet.</p>'}</div></details>`:''}${renderCustomBlocks(cfg,false,'afterPlayers')}`;
+ return `${statusBox}${detailBox}${ev.feeOn?feeHtml(ev):''}<h3>${esc(cfg.signupHeading)}</h3>${signupHtml}${cfg.showPlayersList?`<details class="comingDetails" ${cfg.playersDefaultOpen?'open':''}><summary><span>👥 Players (${signups.length})</span></summary><div class="comingList">${signups.length?signups.map(s=>`<div class="person"><span>${s.status==='playing'?'✅':'👍'} <b>${esc(s.name)}</b> <span class="small">${esc(s.status)}</span></span></div>`).join(''):'<p class="small">No signups yet.</p>'}</div></details>`:''}`;
 }
 function eventCardPlayer(ev){
  const c=eventCounts(ev);
@@ -493,7 +534,7 @@ function renderPlayer(){
  if(!upcoming.length){ $('#main').innerHTML=`<div class="card"><h2>No upcoming play dates</h2><p class="small">Past events are hidden from players. Waiting for the coordinator to add the next event.</p></div>`; return; }
  const current=upcoming[0];
  const future=upcoming.slice(1);
- const cfg=siteSettings(); $('#main').innerHTML=`<div class="sectionTitle"><h2>${esc(cfg.playerHeading)}</h2><p class="small">${esc(cfg.playerSubtitle)}</p></div>${renderCustomBlocks(cfg,false,'afterHeading')}${featuredEventCard(current)}${renderCustomBlocks(cfg,false,'afterFeatured')}${future.length?`<h2 class="otherTitle">${esc(cfg.allNextHeading)}</h2>${future.map(collapsedEventCard).join('')}`:''}`;
+ const cfg=siteSettings(); $('#main').innerHTML=`<div class="sectionTitle"><h2>${esc(cfg.playerHeading)}</h2><p class="small">${esc(cfg.playerSubtitle)}</p></div>${renderCustomBlocks(cfg)}${featuredEventCard(current)}${future.length?`<h2 class="otherTitle">${esc(cfg.allNextHeading)}</h2>${future.map(collapsedEventCard).join('')}`:''}`;
 }
 function feeHtml(ev){ let v=ev.payment||''; const venmoMatch=String(v).match(/@([A-Za-z0-9_.-]+)/); const venmo=venmoMatch?venmoMatch[1]:''; return `<div class="feeBox"><b>💵 Court Fee:</b> $${esc(ev.fee||'')}<br><b>Payment:</b> ${esc(v)}<div style="margin-top:10px">${venmo?`<button class="secondary" onclick="window.open('https://venmo.com/${venmo}','_blank')">Pay with Venmo</button>`:''}<button class="secondary" onclick="markPaid('${ev.id}')">I Paid</button></div></div>`; }
 window.upsertSignup=async(eid,name,status)=>{const ev=state.events.find(e=>e.id===eid); if(!ev)return; let signups=[...(ev.signups||[])]; let s=signups.find(x=>(x.owner===state.user.uid||x.email===state.user.email)&&x.name===name); if(!canSignup(ev)&&!s)return alert('This play date is closed, cancelled, or fully booked.'); if(s){s.status=status;s.updatedAt=new Date().toISOString();} else signups.push({id:crypto.randomUUID(),owner:state.user.uid,email:state.user.email,name,status,checked:false,paid:false,createdAt:new Date().toISOString()}); await updateDoc(doc(db,'events',eid),{signups});};
