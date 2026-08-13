@@ -1,21 +1,21 @@
-Pickleball Signup v3.5 — Logo Positioning + Editable Navigation
+# Pickleball Signup v3.5.1 — Corrected v3.4 Branch
 
-# Pickleball Signup v3.2 — Drag & Drop Builder
+This build is based directly on **v3.4 Direct Page Drop**. No older branch was used.
 
-Built directly from the working v3.1.2 Runtime Fix.
+## Preserved from v3.4
+- Direct-on-Player-page drag and drop builder
+- Smart drop zones around the actual Player page
+- Wide editor workspace and live preview
+- Existing Firebase/auth/events/signup behavior
+- Existing Branding and Labels controls
 
-## New in v3.2
-- Weebly-style **drag & drop Page Builder**.
-- Drag elements from the **Elements library** into the Player page custom area.
-- Drag existing blocks to reorder them.
-- Click an element to add it when drag/drop is inconvenient.
-- Duplicate, hide/show, and delete controls for each custom block.
-- Up/down controls remain available on phones and touch devices.
-- Clear drop zones and visual drag feedback.
-- System event blocks remain protected so Firebase event/signup functionality cannot be accidentally deleted.
-- Desktop/Mobile live preview, Save Draft, Discard, Reset, and Publish remain intact.
-- Branding and Labels tabs remain intact, including editable waiting title/message and minimum-player setting.
-- Firebase configuration and existing data are unchanged.
+## Added / fixed in v3.5.1
+- Logo size control
+- Horizontal and vertical logo positioning
+- Drag the logo directly in Branding Live Preview
+- Navigation editor for rename, reorder, show/hide, and access
+- Edit content for each tab/page
+- Add custom tabs/pages
 
 ## Deploy
-Upload the CONTENTS of this folder to the repository root and replace the existing files.
+Upload the **contents** of this folder to the repository root and replace the existing files.
