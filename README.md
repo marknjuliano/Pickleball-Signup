@@ -1,21 +1,12 @@
-# Pickleball Signup v3.5.1 — Corrected v3.4 Branch
+# PowerDink Pickleball Signup v3.6
 
-This build is based directly on **v3.4 Direct Page Drop**. No older branch was used.
+Built directly from the corrected v3.5.1 / v3.4 direct-page-drop branch.
 
-## Preserved from v3.4
-- Direct-on-Player-page drag and drop builder
-- Smart drop zones around the actual Player page
-- Wide editor workspace and live preview
-- Existing Firebase/auth/events/signup behavior
-- Existing Branding and Labels controls
-
-## Added / fixed in v3.5.1
-- Logo size control
-- Horizontal and vertical logo positioning
-- Drag the logo directly in Branding Live Preview
-- Navigation editor for rename, reorder, show/hide, and access
-- Edit content for each tab/page
-- Add custom tabs/pages
-
-## Deploy
-Upload the **contents** of this folder to the repository root and replace the existing files.
+## v3.6 update
+- Added a **Backup** tab in Site Editor.
+- **Export Site Settings** downloads a versioned JSON backup.
+- **Import Site Settings** restores that JSON into the editor draft only.
+- Imported settings do **not** go live until the coordinator presses **Publish Changes**.
+- Backup includes Site Editor configuration such as branding/logo position, navigation/tab content, labels, Player Page layout, minimum-player/waiting settings, and custom Page Builder blocks.
+- Backup intentionally excludes player accounts, events, signups, notifications, and other live database records.
+- Preserves the v3.4 direct-on-page smart drop-zone builder and v3.5.1 logo/navigation features.

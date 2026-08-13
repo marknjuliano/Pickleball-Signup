@@ -810,3 +810,22 @@ body[data-site-spacing="compact"] .featuredMain{padding-top:30px;padding-bottom:
 .navEditorRow input,.navEditorRow select{margin:0}.navDragDots{font-size:20px;color:#7a8798;text-align:center;cursor:grab}
 .navContentEditor .navBodyField{min-height:180px}.pageIntro{margin:0 0 16px;padding:18px 20px;border:1px solid var(--line);border-radius:18px;background:#fff}.pageIntro h2{margin:0 0 6px}.pageIntro p{margin:0;color:var(--muted)}.pageIntroBody{margin-top:10px;line-height:1.55}.customPageBody{margin-top:16px;line-height:1.65;white-space:normal}
 @media(max-width:800px){.navEditorHeader{display:block}.navEditorHeader button{margin-top:10px}.logoControls .editorTwoCol{grid-template-columns:1fr}}
+
+/* v3.6 Site Settings Backup */
+.backupSection{display:grid;gap:14px}
+.backupActionCard{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:16px;border:1px solid rgba(255,255,255,.13);border-radius:14px;background:rgba(255,255,255,.035)}
+.backupActionCard>div{min-width:0;flex:1}
+.backupActionCard button{flex:0 0 auto;white-space:nowrap}
+.backupActionCard p,.backupSafetyNote p{margin:6px 0 0}
+.backupSafetyNote{padding:14px 16px;border-radius:14px;background:rgba(168,213,0,.08);border:1px solid rgba(168,213,0,.24)}
+@media(max-width:700px){.backupActionCard{align-items:stretch;flex-direction:column}.backupActionCard button{width:100%}}
+
+/* v3.7 Per-Tab Visual Page Builder */
+.tabBuilderBanner{display:flex;justify-content:space-between;gap:12px;align-items:center;margin:18px 0 10px;padding:12px 14px;border-radius:14px;background:rgba(168,213,0,.09);border:1px solid rgba(168,213,0,.28)}
+.tabBuilderBanner span{font-size:12px;color:var(--muted)}
+.previewSystemCard{margin:12px 16px 18px;padding:18px;border:1px solid #d8e0ea;border-radius:16px;background:#fff;box-shadow:0 5px 18px rgba(18,34,54,.06)}
+.previewSystemCard h3{margin:0 0 12px}.previewSystemCard label{font-size:11px;color:#68788c;display:block;margin:8px 0 4px}
+.previewInput{padding:9px 10px;border:1px solid #d8e0ea;border-radius:9px;background:#f8fafc;color:#718096;margin-bottom:8px}
+.previewCalendarMock{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}.previewCalendarMock>*{padding:6px 2px;text-align:center;border-radius:6px;background:#f4f7fa;font-size:10px}.previewCalendarMock b{background:#eaf0f5}
+.previewStats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px}.previewStats b{padding:12px 5px;text-align:center;background:#f4f7fa;border-radius:9px;font-size:11px}
+.customPagePlaceholder{border-style:dashed;text-align:center;color:#7a8798}
