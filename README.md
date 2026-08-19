@@ -14,5 +14,13 @@ The dashboard begins tracking new activity after this build is deployed. Histori
 IMPORTANT: Public view tracking needs the Firestore rules in `FIRESTORE-PUBLIC-EVENT-RULES.txt`. Publish those rules in Firebase Console.
 
 
-## v3.7.10
+## v3.7.11
 Event status wording is now editable in Site Editor > Labels, including Cancelled/Canceled, Court Booked, Closed for Renovation, Closed for Event, Fully Booked, and Waiting. These labels are included in Site Settings export/import.
+
+
+### v3.7.11 fixes
+- Fixed Coordinator navigation falling back to Player because `renderCoordinator()` referenced an undefined site-settings variable.
+- Event statuses are now fully configurable from Site Editor > Labels: add, rename, reorder, show/hide, and delete custom statuses.
+- Custom statuses appear automatically in Coordinator > Create / Edit Event and are saved with each event.
+- Built-in statuses remain backward compatible with existing event documents and existing label settings.
+- Custom status configuration is included in Site Settings Export / Import.

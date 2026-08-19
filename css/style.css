@@ -886,3 +886,11 @@ body[data-site-spacing="compact"] .featuredMain{padding-top:30px;padding-bottom:
 @media (min-width: 1500px){
   .wrap.appFullWidth{width:calc(100% - 40px);}
 }
+
+
+/* v3.7.11 — customizable event statuses */
+.statusEditorHead{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:14px}
+.statusEditorHead h3{margin:0 0 4px}.statusEditorList{display:grid;gap:9px}
+.statusEditorRow{display:grid;grid-template-columns:64px minmax(180px,1fr) auto 42px 42px auto;gap:8px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:14px;background:var(--surface-2)}
+.statusEditorRow input{margin:0}.statusIconInput{text-align:center;font-size:20px;padding-left:6px;padding-right:6px}.statusVisible{display:flex;align-items:center;gap:6px;white-space:nowrap;margin:0;font-size:12px}.statusVisible input{width:auto}
+@media(max-width:760px){.statusEditorHead{display:block}.statusEditorHead button{margin-top:10px;width:100%}.statusEditorRow{grid-template-columns:54px minmax(0,1fr) auto}.statusEditorRow .tinyBtn{min-width:0}.statusVisible{grid-column:3}.statusEditorRow .dangerLite{grid-column:1/-1}}
